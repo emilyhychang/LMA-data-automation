@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Convert one worksheet in an Excel workbook to CSV without changing the workbook."""
+"""Convert xlsx to CSV without changing the workbook"""
 
 from __future__ import annotations
-
 import argparse
 import csv
 from datetime import date, datetime
@@ -27,7 +26,7 @@ def csv_value(value: object) -> object:
 
 
 def convert(source: Path, destination: Path, sheet_name: str | None) -> tuple[str, int]:
-    """Export one worksheet and return its name and number of data rows."""
+    """export worksheet, return its name and number of data rows."""
     if not source.is_file():
         raise FileNotFoundError(f"Excel file not found: {source}")
     if source.suffix.lower() not in {".xlsx", ".xlsm"}:

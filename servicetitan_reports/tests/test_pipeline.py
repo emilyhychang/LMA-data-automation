@@ -19,6 +19,13 @@ class PipelineTest(unittest.TestCase):
             temp_path = Path(temp)
             first = run_import(fixtures / "period_1.csv", temp_path / "master.csv", settings, temp_path / "out1")
             self.assertEqual((first.appended_rows, first.new_customers), (3, 2))
+            with (temp_path / "out1/cleaned_upload.csv").open() as handle:
+                cleaned = list(csv.DictReader(handle))
+
+            self.assertEqual(
+                list(cleaned[0]),
+                settings["master_columns"],
+            )
             second = run_import(fixtures / "period_2.csv", temp_path / "master.csv", settings, temp_path / "out2")
             self.assertEqual((second.appended_rows, second.new_customers), (3, 1))
             repeat = run_import(fixtures / "period_2.csv", temp_path / "master.csv", settings, temp_path / "out3")

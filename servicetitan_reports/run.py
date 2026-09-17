@@ -20,17 +20,30 @@ def iso_date(value: str) -> date:
 
 
 def main() -> None:
+    settings = load_settings(ROOT / "config/settings.json")
     parser = argparse.ArgumentParser(description="Clean ServiceTitan CSV, update the master dataset.")
-    parser.add_argument("csv", type=Path, help="Path to new ServiceTitan CSV export")
-    parser.add_argument("--period-start", type=iso_date, help="Override inferred start date (YYYY-MM-DD)")
-    parser.add_argument("--period-end", type=iso_date, help="Override inferred end date (YYYY-MM-DD)")
-    parser.add_argument("--master", type=Path, default=ROOT / "data/master/master_dataset.csv")
-    parser.add_argument("--output-dir", type=Path, help="Where this import's report ready CSV files are saved")
+    parser.add_argument("csv", type=Path, 
+                        help="Path to new ServiceTitan CSV export")
+    parser.add_argument("--period-start", 
+                        type=iso_date, 
+                        help="Override inferred start date (YYYY-MM-DD)")
+    parser.add_argument("--period-end", 
+                        type=iso_date, 
+                        help="Override inferred end date (YYYY-MM-DD)")
+    parser.add_argument("--master",
+                        type=Path,
+                        default=ROOT / "data/master" / settings["master_filename"],
+                        help="Master job-mix CSV to update",
+)
+    parser.add_argument("--output-dir", 
+                        type=Path, 
+                        help="Where this import's report ready CSV files are saved")
     args = parser.parse_args()
     if not args.csv.is_file():
         parser.error(f"CSV not found: {args.csv}")
-    output_dir = args.output_dir or ROOT / "output" / f"{args.period_end or date.today():%Y-%m-%d}"
-    result = run_import(args.csv, args.master, load_settings(ROOT / "config/settings.json"), output_dir,
+    upload_folder = ROOT / "data" / "biweekly-data" / args.csv.stem
+    output_dir = upload_folder
+    result = run_import(args.csv, args.master, settings, output_dir,
                         args.period_start, args.period_end)
     print(f"Imported {result.appended_rows} records ({result.skipped_duplicate_rows} duplicate records skipped).")
     print(f"New customers: {result.new_customers}. Period: {result.period_start} through {result.period_end}.")
