@@ -1,0 +1,22 @@
+{
+  "customer_id_column": "Customer ID",
+  "activity_date_column": "Lead Date",
+  "column_aliases": {
+    "customer id": "Customer ID",
+    "customerid": "Customer ID",
+    "customer #": "Customer ID",
+    "customer number": "Customer ID",
+    "lead date": "Lead Date",
+    "created date": "Lead Date",
+    "date created": "Lead Date",
+    "lead source": "Lead Source",
+    "source": "Lead Source",
+    "revenue": "Revenue",
+    "job revenue": "Revenue"
+  },
+  "date_formats": [
+    "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%m-%d-%Y", "%m-%d-%y",
+    "%Y/%m/%d", "%m/%d/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S"
+  ],
+  "dedupe_columns": ["Customer ID", "Lead Date", "Lead Source", "Revenue"]
+}
