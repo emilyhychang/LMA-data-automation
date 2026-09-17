@@ -14,7 +14,7 @@ class PipelineTest(unittest.TestCase):
     
     def test_first_seen_and_reimport_are_idempotent(self):
         settings = load_settings(PROJECT / "config/settings.json")
-        fixtures = PROJECT / "tests/fake_data"
+        fixtures = PROJECT / "fake_data"
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)
             first = run_import(fixtures / "period_1.csv", temp_path / "master.csv", settings, temp_path / "out1")
