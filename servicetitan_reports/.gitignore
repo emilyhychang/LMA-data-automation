@@ -1,3 +1,21 @@
-data/master/master_dataset.csv
-output/
+# macOS Finder files
+.DS_Store
+
+# Python cache files
 __pycache__/
+*.py[cod]
+
+# Python virtual environments
+.venv/
+venv/
+
+# Generated report files
+output/
+
+# Raw client data and generated master datasets
+data-imports/*.csv
+data-imports/master/*.csv
+data-imports/master/*.xlsx
+
+# Local editor settings
+.vscode/
