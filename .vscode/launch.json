@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug ServiceTitan import",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/servicetitan_reports/run.py",
+      "args": [
+        "${workspaceFolder}/servicetitan_reports/data-imports/08_24-09_06.csv"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

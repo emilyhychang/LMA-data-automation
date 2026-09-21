@@ -23,7 +23,6 @@
     "B Qtr",
     "B Mo",
     "B Wk"
-
   ],
   "column_aliases": {
     "customer id": "Customer ID",
@@ -42,5 +41,18 @@
     "%m/%d/%y",
     "%Y-%m-%d",
     "%Y/%m/%d"
+  ],
+  "required_columns": [
+    "Customer ID",
+    "Created Date",
+    "Invoice Business Unit",
+    "Job Type"
+  ],
+  "dedupe_columns": [
+    "Customer ID",
+    "Created Date",
+    "Completion Date",
+    "Invoice Business Unit",
+    "Job Type"
   ]
 }

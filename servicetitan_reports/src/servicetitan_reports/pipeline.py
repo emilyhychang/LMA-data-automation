@@ -62,7 +62,8 @@ def parse_amount(value: str) -> str:
         value = "-" + value[1:-1]
 
     try:
-        return format(Decimal(value).quantize(Decimal("0.01")), "f")
+        amount = Decimal(value).quantize(Decimal("0.01"))
+        return format(amount.normalize(), "f") if amount else "0"
     except InvalidOperation:
         return value
 
@@ -126,10 +127,18 @@ def standardise_row(
 
     row["Total"] = parse_amount(row["Total"])
 
+    if row["Opportunity"].lower() in {"true", "false"}:
+        row["Opportunity"] = row["Opportunity"].capitalize()
+
     add_calendar_fields(row, "Created Date", "C", settings)
-    add_calendar_fields(row, "Completion Date", "B", settings)
+    # The existing master defines B calendar fields from Created Date.
+    add_calendar_fields(row, "Created Date", "B", settings)
 
     return row
+
+
+def has_required_values(row: dict[str, str], settings: dict[str, Any]) -> bool:
+    return all(clean_text(row.get(column, "")) for column in settings["required_columns"])
 
 
 def read_and_clean_export(
@@ -137,10 +146,11 @@ def read_and_clean_export(
     settings: dict[str, Any],
 ) -> list[dict[str, str]]:
     """
-    Read a ServiceTitan export.
+    Read a ServiceTitan export and keep only valid job rows.
 
-    Rows such as 'Invoice Business Unit: HVAC Install' are ignored because
-    they do not contain a Customer ID.
+    A valid row must have a Customer ID. This removes blank rows,
+    section/header rows, and other non-customer records from all
+    downstream analysis.
     """
 
     with source.open(encoding="utf-8-sig", newline="") as handle:
@@ -154,8 +164,14 @@ def read_and_clean_export(
         for raw in reader:
             row = standardise_row(raw, settings)
 
-            if row["Customer ID"]:
-                rows.append(row)
+            # Ignore rows without a Customer ID.
+            customer_id = clean_text(row.get("Customer ID", ""))
+
+            if not customer_id or not has_required_values(row, settings):
+                continue
+
+            row["Customer ID"] = customer_id
+            rows.append(row)
 
     if not rows:
         raise ValueError(
@@ -316,6 +332,7 @@ def run_import(
     period_end: date | None = None,
 ) -> ImportResult:
     columns = settings["master_columns"]
+    dedupe_columns = settings["dedupe_columns"]
 
     cleaned_rows = read_and_clean_export(source, settings)
 
@@ -332,16 +349,23 @@ def run_import(
             "period end must be on or after period start"
         )
 
-    master_rows = [
-        {
+    master_rows = []
+
+    for row in read_csv(master_path):
+        cleaned_row = {
             column: clean_text(row.get(column, ""))
             for column in columns
         }
-        for row in read_csv(master_path)
-    ]
+
+        # Never allow blank/non-customer rows from the master
+        # into comparisons, duplicate detection, or reporting.
+        if not has_required_values(cleaned_row, settings):
+            continue
+
+        master_rows.append(cleaned_row)
 
     existing_records = {
-        fingerprint(row, columns)
+        fingerprint(row, dedupe_columns)
         for row in master_rows
     }
 
@@ -363,7 +387,7 @@ def run_import(
             item["Customer ID"],
         ),
     ):
-        record_hash = fingerprint(row, columns)
+        record_hash = fingerprint(row, dedupe_columns)
 
         if record_hash in existing_records:
             continue
@@ -383,16 +407,26 @@ def run_import(
 
     final_master_rows = master_rows + appended_rows
 
+    # Persist only valid Customer ID rows in the one continuing master dataset.
+    # write_csv(master_path, final_master_rows, columns)
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cleaned_file = output_dir / f"{source.stem}_cleaned.csv"
 
-    write_csv(cleaned_file, appended_rows, columns)
+    write_csv(cleaned_file, cleaned_rows, columns)
     write_csv(output_dir / "new_customers.csv", new_customer_rows, columns)
 
     new_leads_path = master_path.parent / settings["new_leads_filename"]
 
-    existing_new_leads = read_csv(new_leads_path)
+    existing_new_leads = [
+        {
+            column: clean_text(row.get(column, ""))
+            for column in columns
+        }
+        for row in read_csv(new_leads_path)
+        if has_required_values({column: clean_text(row.get(column, "")) for column in columns}, settings)
+    ]
 
     write_csv(
         new_leads_path,

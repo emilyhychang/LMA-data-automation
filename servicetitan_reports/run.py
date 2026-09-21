@@ -32,7 +32,7 @@ def main() -> None:
                         help="Override inferred end date (YYYY-MM-DD)")
     parser.add_argument("--master",
                         type=Path,
-                        default=ROOT / "data/master" / settings["master_filename"],
+                        default=ROOT / "data-imports/master" / settings["master_filename"],
                         help="Master job-mix CSV to update",
 )
     parser.add_argument("--output-dir", 
@@ -41,8 +41,7 @@ def main() -> None:
     args = parser.parse_args()
     if not args.csv.is_file():
         parser.error(f"CSV not found: {args.csv}")
-    upload_folder = ROOT / "data" / "biweekly-data" / args.csv.stem
-    output_dir = upload_folder
+    output_dir = args.output_dir or ROOT / "output" / args.csv.stem
     result = run_import(args.csv, args.master, settings, output_dir,
                         args.period_start, args.period_end)
     print(f"Imported {result.appended_rows} records ({result.skipped_duplicate_rows} duplicate records skipped).")
