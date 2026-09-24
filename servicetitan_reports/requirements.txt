@@ -1,0 +1,2 @@
+streamlit==1.50.0
+openpyxl>=3.1

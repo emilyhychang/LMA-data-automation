@@ -64120,3 +64120,442 @@ Customer ID,Created Date,Completion Date,Invoice Business Unit,Job Type,Job Stat
 1136175870,46271,,Plumbing Service,Water Heater Repair - Residential,Scheduled,Direct Web Traffic,Direct Web Traffic,92124,0,TRUE,2026,3,September,2026,3,September,36
 31647544,46271,46271,Plumbing Service,Water Heater Repair - Residential,Canceled,Google LSA,Google Local Services,92024,0,TRUE,2026,3,September,2026,3,September,36
 1136239079,46271,,Plumbing Service,Water Heater Repair - Residential,In Progress,Google LSA,Google Local Services,92154,7500,TRUE,2026,3,September,2026,3,September,36
+100392825,2026-09-07,2026-09-08,HVAC Service,A/C Repair,Canceled,Yelp,Yelp,91942,0,True,2026,3,September,2026,3,September,37
+1136175778,2026-09-07,,HVAC Service,Diagnosis,Scheduled,Sameday AI,Sameday AI,92024,0,True,2026,3,September,2026,3,September,37
+1136195515,2026-09-07,,HVAC Service,Diagnosis,Scheduled,Direct Web Traffic,Direct Web Traffic,92108,0,True,2026,3,September,2026,3,September,37
+1136219166,2026-09-07,2026-09-09,HVAC Service,Diagnosis,Canceled,Direct Web Traffic,Direct Web Traffic,92101,0,True,2026,3,September,2026,3,September,37
+1136240919,2026-09-07,2026-09-18,HVAC Service,Diagnosis,Canceled,Branded Phone Number,Local 619,91913,0,True,2026,3,September,2026,3,September,37
+1136240935,2026-09-07,2026-09-11,HVAC Service,Diagnosis,Canceled,Direct Web Traffic,Direct Web Traffic,92024,0,True,2026,3,September,2026,3,September,37
+1136263746,2026-09-07,2026-09-07,Plumbing Service,Slab Leak,Canceled,Organic Search,Google Organic,92124,0,True,2026,3,September,2026,3,September,37
+1136263764,2026-09-07,2026-09-08,Plumbing Service,Pipe Leak,Canceled,Branded Phone Number,A1-800-BILL HOWE,91935,0,True,2026,3,September,2026,3,September,37
+1136263850,2026-09-07,2026-09-08,Plumbing Service,Upper/Lower Leak,Completed,Google Business Profiles,GMB_SanDiego,92109,0,True,2026,3,September,2026,3,September,37
+1136263871,2026-09-07,2026-09-08,Plumbing Service,Gas Leak,Completed,Google Business Profiles,GMB_SanDiego,92111,0,True,2026,3,September,2026,3,September,37
+1136287972,2026-09-07,2026-09-07,Plumbing Service,Mainline Stop,Completed,Google LSA,Google Local Services,92091,450,True,2026,3,September,2026,3,September,37
+1136288084,2026-09-07,2026-09-11,Plumbing Sales,Repipe/Reroute Estimate,Completed,PPC,Google | Search | Brand,92109,0,False,2026,3,September,2026,3,September,37
+1136290079,2026-09-07,2026-09-07,Plumbing Service,Pipe Leak,Completed,Google Business Profiles,GMB_SanDiego,92101,450,True,2026,3,September,2026,3,September,37
+1136290241,2026-09-07,2026-09-08,Plumbing Service,Gas Lock Out,Completed,Organic Search,Google Organic,92121,287,True,2026,3,September,2026,3,September,37
+1136292713,2026-09-07,2026-09-08,HVAC Service,A/C Repair,Canceled,Google Business Profiles,GMB_SanDiego,92117,0,True,2026,3,September,2026,3,September,37
+1136295440,2026-09-07,2026-09-09,Plumbing Service,Pipe Leak,Canceled,PPC,Google | Search | Brand,92129,0,True,2026,3,September,2026,3,September,37
+1136298855,2026-09-07,,Plumbing Service,Plumbing Service,Scheduled,Uncategorized,Uncategorized,92130,0,True,2026,3,September,2026,3,September,37
+1136298870,2026-09-07,2026-09-10,HVAC Sales,HVAC Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92078,0,True,2026,3,September,2026,3,September,37
+1136383513,2026-09-07,2026-09-08,Plumbing Service,Mainline Stop,Completed,Direct Web Traffic,Direct Web Traffic,92111,0,True,2026,3,September,2026,3,September,37
+1136389241,2026-09-07,2026-09-08,Plumbing Service,Toilet Leak,Completed,Organic Search,Google Organic,92115,265,True,2026,3,September,2026,3,September,37
+283219355,2026-09-07,2026-09-07,Plumbing Service,Mainline Stop,Completed,PPC,Google | PMAX | Drains,92008,625,True,2026,3,September,2026,3,September,37
+301091498,2026-09-07,,Plumbing Maintenance,Backflow Test,Hold,Branded Phone Number,Local 619,92123,0,True,2026,3,September,2026,3,September,37
+31614181,2026-09-07,2026-09-08,Plumbing Service,Lavatory Stop,Completed,Branded Phone Number,Local 619,92118,187,True,2026,3,September,2026,3,September,37
+45662865,2026-09-07,2026-09-08,HVAC Service,A/C Repair,Canceled,PPC,Google | Search | Brand,92040,0,True,2026,3,September,2026,3,September,37
+84821056,2026-09-07,2026-09-09,Plumbing Sales,Repipe/Reroute Estimate,Completed,3rd Party Web Traffic,Yelp Referral Traffic,92114,0,False,2026,3,September,2026,3,September,37
+1136175831,2026-09-08,2026-09-08,Plumbing Sales,Plumbing Estimate,Completed,Google LSA,Google Local Services,92115,0,True,2026,3,September,2026,3,September,37
+1136219117,2026-09-08,,Plumbing Service,Pipe Leak,Hold,Direct Web Traffic,Direct Web Traffic,92064,0,True,2026,3,September,2026,3,September,37
+1136219197,2026-09-08,,HVAC Maintenance,Preventative Maintenance,Scheduled,Direct Web Traffic,Direct Web Traffic,92104,0,True,2026,3,September,2026,3,September,37
+1136265640,2026-09-08,2026-09-08,Plumbing Service,Lavatory Stop,Completed,Direct Web Traffic,Direct Web Traffic,91941,144,True,2026,3,September,2026,3,September,37
+1136300574,2026-09-08,2026-09-08,Plumbing Service,Pipe Leak,Completed,Google Business Profiles,GMB_Poway,92064,0,False,2026,3,September,2026,3,September,37
+1136300589,2026-09-08,2026-09-09,Plumbing Service,Disposal,Completed,PPC,Google | Search | Brand,92116,212,True,2026,3,September,2026,3,September,37
+1136384410,2026-09-08,2026-09-08,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | Brand,92011,0,True,2026,3,September,2026,3,September,37
+1136387673,2026-09-08,2026-09-08,HVAC Service,Diagnosis,Completed,External Referral,Referral,92019,727.43,True,2026,3,September,2026,3,September,37
+1136389268,2026-09-08,2026-09-08,Plumbing Service,Sewer Camera,Canceled,Google LSA,Google Local Services,92124,0,True,2026,3,September,2026,3,September,37
+1136391314,2026-09-08,2026-09-11,Plumbing Service,Combo,Canceled,Website,Online Booking,92037,0,True,2026,3,September,2026,3,September,37
+1136396238,2026-09-08,2026-09-08,Plumbing Service,Water Heater Repair - Residential,Completed,PPC,Google | Search | Plumbing,92114,0,True,2026,3,September,2026,3,September,37
+1136397317,2026-09-08,,Plumbing Service,Toilet Stop,Hold,Google Business Profiles,GMB_SanDiego,92037,488,True,2026,3,September,2026,3,September,37
+1136402967,2026-09-08,2026-09-11,HVAC Sales,HVAC Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92123,0,True,2026,3,September,2026,3,September,37
+1136403066,2026-09-08,2026-09-09,Plumbing Service,Reset Toilet,Completed,PPC,Bing | Search | Brand,92026,221.4,True,2026,3,September,2026,3,September,37
+1136408943,2026-09-08,2026-09-15,HVAC Service,Diagnosis,Completed,Google Business Profiles,GMB_SanDiego,92115,87,True,2026,3,September,2026,3,September,37
+1136408958,2026-09-08,2026-09-08,Plumbing Service,Water Heater Repair - Residential,Completed,Sameday AI,Sameday AI,92119,0,False,2026,3,September,2026,3,September,37
+1136434402,2026-09-08,2026-09-08,Plumbing Service,Lavatory Stop,Completed,PPC,Google | Search | Brand,92075,102,True,2026,3,September,2026,3,September,37
+1136434459,2026-09-08,2026-09-19,HVAC Sales,HVAC Estimate,Completed,PPC,Google | Search | Brand,92037,0,True,2026,3,September,2026,3,September,37
+1136441038,2026-09-08,2026-09-09,HVAC Service,Diagnosis,Completed,PPC,Google | Search | Brand,92040,544.01,True,2026,3,September,2026,3,September,37
+1136447298,2026-09-08,2026-09-09,Plumbing Service,Laundry Stop,Completed,Google Business Profiles,GMB_SanDiego,92128,0,True,2026,3,September,2026,3,September,37
+1136449616,2026-09-08,2026-09-10,Plumbing Service,Laundry Stop,Completed,PPC,Google | Search | Brand,92114,57,True,2026,3,September,2026,3,September,37
+1136454301,2026-09-08,2026-09-10,Plumbing Sales,Drain Estimate,Canceled,Email,Legacy Email Marketing Multiple Offers,92117,0,False,2026,3,September,2026,3,September,37
+1136458541,2026-09-08,2026-09-09,Plumbing Sales,Drain Estimate,Completed,Branded Phone Number,A1-800-BILL HOWE,92025,0,False,2026,3,September,2026,3,September,37
+1136506644,2026-09-08,2026-09-10,HVAC Sales,HVAC Estimate,Completed,PPC,Google | Search | Brand,92104,0,True,2026,3,September,2026,3,September,37
+1136507790,2026-09-08,2026-09-09,Plumbing Service,Lavatory Faucet,Completed,Email,Legacy Email Marketing Multiple Offers,92025,212,True,2026,3,September,2026,3,September,37
+1136516324,2026-09-08,2026-09-14,HVAC Service,Diagnosis,Completed,CSR Outbound,$1 OUTBOUND (use this for out-bounding),91950,0,True,2026,3,September,2026,3,September,37
+1136524334,2026-09-08,2026-09-09,Plumbing Sales,Plumbing Estimate,Completed,PPC,Google | PMAX | Drains,92008,0,False,2026,3,September,2026,3,September,37
+1136551165,2026-09-08,2026-09-09,HVAC Service,Diagnosis,Completed,Branded Phone Number,Local 619,92117,0,False,2026,3,September,2026,3,September,37
+1136552426,2026-09-08,2026-09-09,Plumbing Service,Laundry Bibbs,Completed,Direct Web Traffic,Direct Web Traffic,92019,0,False,2026,3,September,2026,3,September,37
+1137731168,2026-09-08,2026-09-09,Plumbing Service,Sewer Camera,Completed,Email,Legacy Email Marketing Multiple Offers,92111,0,True,2026,3,September,2026,3,September,37
+1137744899,2026-09-08,2026-09-10,Plumbing Service,Upper/Lower Leak,Completed,PPC,Google | Search | Plumbing,92011,3324,True,2026,3,September,2026,3,September,37
+1137745042,2026-09-08,,HVAC Sales,HVAC Estimate,Hold,PPC,Google | Search | Brand,91913,0,True,2026,3,September,2026,3,September,37
+1137745057,2026-09-08,2026-09-09,Plumbing Service,Pipe Leak,Completed,Google Business Profiles,GMB_Poway,92067,4580,True,2026,3,September,2026,3,September,37
+1137751950,2026-09-08,2026-09-10,Plumbing Service,Upper/Lower Leak,Completed,Google Business Profiles,GMB_SanDiego,91915,0,True,2026,3,September,2026,3,September,37
+1137777725,2026-09-08,2026-09-08,Plumbing Service,Pipe Leak,Completed,Website,Website Phone Calls,92129,462,True,2026,3,September,2026,3,September,37
+1137780335,2026-09-08,,HVAC Maintenance,Preventative Maintenance,Scheduled,PPC,Google | PMAX | HVAC,92128,0,True,2026,3,September,2026,3,September,37
+1137782878,2026-09-08,2026-09-09,Plumbing Sales,Plumbing Estimate,Completed,Sameday AI,Sameday AI,92129,0,False,2026,3,September,2026,3,September,37
+272172489,2026-09-08,2026-09-09,Plumbing Install,Toilet Install,Completed,Google Business Profiles,GMB_SanDiego,92130,2065,True,2026,3,September,2026,3,September,37
+291900002,2026-09-08,2026-09-10,Plumbing Service,Lavatory Stop,Completed,Google LSA,Google Local Services,92123,144,True,2026,3,September,2026,3,September,37
+31567031,2026-09-08,2026-09-08,Plumbing Service,Kitchen Faucet,Completed,Organic Search,Google Organic,92115,525.6,True,2026,3,September,2026,3,September,37
+31576797,2026-09-08,2026-09-09,Plumbing Sales,Water Heater Estimate - Residential,Completed,Branded Phone Number,A1-800-BILL HOWE,92124,0,True,2026,3,September,2026,3,September,37
+31590690,2026-09-08,2026-09-08,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | HVAC,92117,0,True,2026,3,September,2026,3,September,37
+49460296,2026-09-08,,HVAC Service,10+ HVAC Unit,Scheduled,Branded Phone Number,Local 619,92009,0,True,2026,3,September,2026,3,September,37
+65946699,2026-09-08,2026-09-10,Plumbing Service,Disposal,Completed,Google Business Profiles,GMB_SanDiego,92064,477,True,2026,3,September,2026,3,September,37
+85937489,2026-09-08,2026-09-18,Plumbing Service,Tub/Shower Faucet,Completed,Website,Online Booking,91977,358.2,True,2026,3,September,2026,3,September,37
+92322431,2026-09-08,,HVAC Maintenance,Preventative Maintenance,Scheduled,Sameday AI,Sameday AI,92139,0,True,2026,3,September,2026,3,September,37
+100356502,2026-09-09,,Plumbing Service,Mainline Stop,Hold,Google Business Profiles,GMB_SanDiego,92129,0,True,2026,3,September,2026,3,September,37
+1136264006,2026-09-09,2026-09-16,Plumbing Maintenance,Backflow Test,Completed,Branded Phone Number,Local 619,91932,104,True,2026,3,September,2026,3,September,37
+1136419097,2026-09-09,2026-09-17,HVAC Service,Diagnosis,Completed,,2025 Q1 Account Customer Newsletter,92127,129,True,2026,3,September,2026,3,September,37
+1137805410,2026-09-09,2026-09-09,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | Brand,92020,0,True,2026,3,September,2026,3,September,37
+1137811773,2026-09-09,2026-09-14,HVAC Sales,HVAC Estimate,Completed,Yelp,Yelp,92117,0,True,2026,3,September,2026,3,September,37
+1137812050,2026-09-09,2026-09-17,Lining Install - CA,Lining Estimate,Completed,PPC,Google | Search | Brand,92024,0,True,2026,3,September,2026,3,September,37
+1137815010,2026-09-09,2026-09-09,HVAC Sales,HVAC Estimate,Canceled,Direct Web Traffic,Direct Web Traffic,92019,0,True,2026,3,September,2026,3,September,37
+1137817602,2026-09-09,2026-09-10,HVAC Service,Diagnosis,Completed,Google Business Profiles,GMB_SanDiego,92020,87,True,2026,3,September,2026,3,September,37
+1137820254,2026-09-09,2026-09-15,HVAC Sales,HVAC Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92154,0,True,2026,3,September,2026,3,September,37
+1137820273,2026-09-09,2026-09-11,Plumbing Service,Angle Stop,Completed,Sameday AI,Sameday AI,92115,0,True,2026,3,September,2026,3,September,37
+1137821662,2026-09-09,2026-09-11,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | Competitor,92117,0,True,2026,3,September,2026,3,September,37
+1137836059,2026-09-09,2026-09-09,Plumbing Sales,Water Filtration Estimate,Completed,Google Business Profiles,GMB_SanDiego,92118,0,True,2026,3,September,2026,3,September,37
+1137841435,2026-09-09,,HVAC Service,Diagnosis,Scheduled,Branded Phone Number,A1-800-BILL HOWE,92124,0,True,2026,3,September,2026,3,September,37
+1137844282,2026-09-09,2026-09-10,HVAC Service,Diagnosis,Canceled,Organic Search,Google Organic,92130,0,True,2026,3,September,2026,3,September,37
+1137845727,2026-09-09,2026-09-10,Plumbing Service,Toilet Stop,Completed,Branded Phone Number,A1-800-BILL HOWE,92075,1249.25,True,2026,3,September,2026,3,September,37
+1137845745,2026-09-09,,HVAC Service,Diagnosis,Scheduled,Direct Web Traffic,Direct Web Traffic,92129,0,True,2026,3,September,2026,3,September,37
+1137848288,2026-09-09,2026-09-09,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | HVAC,92127,0,True,2026,3,September,2026,3,September,37
+1137848578,2026-09-09,2026-09-10,Plumbing Service,Combo,Completed,Email,Legacy Email Marketing Multiple Offers,92075,457,True,2026,3,September,2026,3,September,37
+1137848637,2026-09-09,2026-09-09,Plumbing Service,Ice Maker Line,Canceled,PPC,Google | Search | Plumbing,92014,0,True,2026,3,September,2026,3,September,37
+1137985389,2026-09-09,2026-09-14,Plumbing Service,Upper/Lower Leak,Completed,PPC,Google | Search | Brand,91932,2757,True,2026,3,September,2026,3,September,37
+1137993019,2026-09-09,2026-09-15,Plumbing Service,Toilet Leak,Completed,Google Business Profiles,GMB_SanDiego,92107,1209.35,True,2026,3,September,2026,3,September,37
+1137994163,2026-09-09,2026-09-10,HVAC Service,Diagnosis,Completed,PPC,Google | Search | HVAC,92019,225,True,2026,3,September,2026,3,September,37
+1137994306,2026-09-09,2026-09-10,HVAC Sales,HVAC Estimate,Completed,CSR Outbound,$1 OUTBOUND (use this for out-bounding),92102,0,False,2026,3,September,2026,3,September,37
+1137995048,2026-09-09,2026-09-10,Plumbing Service,Sewer Smell,Completed,Yelp,Yelp,91942,0,True,2026,3,September,2026,3,September,37
+1137995695,2026-09-09,2026-09-11,Plumbing Service,Ice Maker Line,Completed,Yelp,Yelp,92020,250,True,2026,3,September,2026,3,September,37
+1137996607,2026-09-09,2026-09-15,HVAC Sales,HVAC Estimate,Completed,Yelp,Yelp,92024,0,True,2026,3,September,2026,3,September,37
+1138006704,2026-09-09,2026-09-10,Plumbing Service,Kitchen Stop,Completed,Google Business Profiles,GMB_SanDiego,91932,102,True,2026,3,September,2026,3,September,37
+1138007290,2026-09-09,2026-09-11,HVAC Service,Diagnosis,Canceled,Branded Phone Number,Local 619,92024,0,True,2026,3,September,2026,3,September,37
+1138046348,2026-09-09,,HVAC Service,Diagnosis,Scheduled,Google Business Profiles,GMB_SanDiego,91913,0,True,2026,3,September,2026,3,September,37
+1138051039,2026-09-09,2026-09-18,HVAC Sales,HVAC Estimate,Completed,Google Business Profiles,GMB_SanDiego,92083,0,True,2026,3,September,2026,3,September,37
+1138066658,2026-09-09,2026-09-18,HVAC Sales,HVAC Estimate,Canceled,Google Business Profiles,GMB_SanDiego,92008,0,True,2026,3,September,2026,3,September,37
+1138080679,2026-09-09,,HVAC Service,Diagnosis,Scheduled,Website,Email Contact Form,91913,0,True,2026,3,September,2026,3,September,37
+1138081050,2026-09-09,2026-09-10,Plumbing Service,Kitchen Faucet,Completed,Direct Web Traffic,Direct Web Traffic,92102,912,True,2026,3,September,2026,3,September,37
+1138081248,2026-09-09,2026-09-10,Plumbing Sales,Tankless Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92014,0,True,2026,3,September,2026,3,September,37
+1138084486,2026-09-09,2026-09-09,HVAC Service,10+ HVAC Unit,Canceled,PPC,Google | PMAX | HVAC,92111,0,True,2026,3,September,2026,3,September,37
+1138227876,2026-09-09,2026-09-15,HVAC Sales,HVAC Estimate,Completed,External Referral,Referral,92107,0,True,2026,3,September,2026,3,September,37
+1138230467,2026-09-09,2026-09-09,Plumbing Service,Pipe Leak,Canceled,PPC,Google | PMAX | Plumbing,92127,0,True,2026,3,September,2026,3,September,37
+1138232960,2026-09-09,,HVAC Sales,HVAC Estimate,Scheduled,Google Business Profiles,GMB_SanDiego,91911,0,True,2026,3,September,2026,3,September,37
+1138233334,2026-09-09,2026-09-09,HVAC Service,A/C Repair,Completed,Yelp,Yelp,92128,719.39,True,2026,3,September,2026,3,September,37
+249501195,2026-09-09,2026-09-10,Plumbing Service,Mainline Stop,Completed,Email,Legacy Email Marketing Multiple Offers,92067,175,True,2026,3,September,2026,3,September,37
+257923964,2026-09-09,2026-09-16,HVAC Sales,HVAC Estimate,Completed,Yelp,Yelp,92127,0,False,2026,3,September,2026,3,September,37
+31554401,2026-09-09,2026-09-10,Plumbing Service,Tub/Shower Stop,Completed,Google Business Profiles,GMB_SanDiego,92037,364,True,2026,3,September,2026,3,September,37
+31613156,2026-09-09,2026-09-09,Plumbing Maintenance,Tankless Flush,Completed,Google Business Profiles,GMB_SanDiego,91914,0,True,2026,3,September,2026,3,September,37
+31630020,2026-09-09,2026-09-09,Plumbing Service,Pipe Leak,Completed,Organic Search,Google Organic,92064,524,True,2026,3,September,2026,3,September,37
+31709091,2026-09-09,2026-09-09,Plumbing Service,Water Heater Repair - Residential,Completed,Direct Web Traffic,Direct Web Traffic,92129,0,True,2026,3,September,2026,3,September,37
+31716469,2026-09-09,2026-09-10,HVAC Sales,HVAC Estimate,Canceled,Google Business Profiles,GMB_SanDiego,91941,0,True,2026,3,September,2026,3,September,37
+31724910,2026-09-09,2026-09-09,HVAC Service,Diagnosis,Canceled,Yelp,Yelp,92067,0,True,2026,3,September,2026,3,September,37
+31731475,2026-09-09,2026-09-10,Plumbing Service,Slab Leak,Canceled,Google Business Profiles,GMB_SanDiego,92154,0,True,2026,3,September,2026,3,September,37
+50928453,2026-09-09,2026-09-14,HVAC Service,Diagnosis,Canceled,Branded Phone Number,A1-800-BILL HOWE,92130,0,True,2026,3,September,2026,3,September,37
+67594571,2026-09-09,,HVAC Service,A/C Repair,Scheduled,PPC,Google | Search | Brand,92108,0,True,2026,3,September,2026,3,September,37
+1138255664,2026-09-10,,Plumbing Maintenance,Water Heater Flush,Scheduled,Branded Phone Number,Local 619,92127,0,True,2026,3,September,2026,3,September,37
+1138258405,2026-09-10,2026-09-10,Plumbing Service,Lavatory Faucet,Completed,Organic Search,Google Organic,92014,250,True,2026,3,September,2026,3,September,37
+1138259239,2026-09-10,2026-09-16,HVAC Sales,HVAC Estimate,Completed,Google LSA,Google Local Services,92116,0,False,2026,3,September,2026,3,September,37
+1138259934,2026-09-10,2026-09-14,Lining Install - CA,Lining Estimate,Completed,Branded Phone Number,A1-800-BILL HOWE,92130,0,False,2026,3,September,2026,3,September,37
+1138273374,2026-09-10,,HVAC Service,Diagnosis,Scheduled,PPC,Google | Search | Brand,91914,0,True,2026,3,September,2026,3,September,37
+1138352147,2026-09-10,2026-09-10,Plumbing Service,Toilet Stop,Completed,PPC,Google | PMAX | Drains,92024,102,True,2026,3,September,2026,3,September,37
+1138352184,2026-09-10,2026-09-18,HVAC Sales,HVAC Estimate,Completed,PPC,Google | Search | HVAC,92024,0,False,2026,3,September,2026,3,September,37
+1138354627,2026-09-10,2026-09-16,HVAC Sales,HVAC Estimate,Canceled,Organic Search,Google Organic,91913,0,True,2026,3,September,2026,3,September,37
+1138356723,2026-09-10,2026-09-11,Plumbing Service,Laundry Stop,Completed,PPC,Google | Search | Brand,92115,1961,True,2026,3,September,2026,3,September,37
+1138366606,2026-09-10,2026-09-10,Plumbing Service,Floor Drain Stop,Completed,PPC,Google | Search | Brand,92025,144,True,2026,3,September,2026,3,September,37
+1138371819,2026-09-10,2026-09-15,Plumbing Sales,Plumbing Estimate,Completed,Branded Phone Number,A1-800-BILL HOWE,92008,0,False,2026,3,September,2026,3,September,37
+1138372772,2026-09-10,2026-09-10,Plumbing Service,Ice Maker Line,Completed,PPC,Google | PMAX | Plumbing,92128,250,True,2026,3,September,2026,3,September,37
+1138377571,2026-09-10,2026-09-10,HVAC Maintenance,Preventative Maintenance,Canceled,PPC,Google | Search | Brand,91941,0,True,2026,3,September,2026,3,September,37
+1138377586,2026-09-10,2026-09-15,HVAC Sales,HVAC Estimate,Canceled,PPC,Google | Search | HVAC,91911,0,True,2026,3,September,2026,3,September,37
+1138377839,2026-09-10,2026-09-10,Plumbing Sales,Plumbing Estimate,Canceled,Email,Legacy Email Marketing Multiple Offers,91913,0,True,2026,3,September,2026,3,September,37
+1138399484,2026-09-10,2026-09-17,HVAC Sales,HVAC Estimate,Canceled,PPC,Google | Search | Competitor,92078,0,True,2026,3,September,2026,3,September,37
+1138404794,2026-09-10,2026-09-11,Plumbing Service,Toilet Leak,Completed,Google Business Profiles,GMB_SanDiego,92111,292,True,2026,3,September,2026,3,September,37
+1138419533,2026-09-10,2026-09-11,Plumbing Service,Toilet Leak,Completed,Branded Phone Number,Local 619,91942,1122,True,2026,3,September,2026,3,September,37
+1138420446,2026-09-10,,HVAC Maintenance,Preventative Maintenance,Scheduled,Direct Web Traffic,Direct Web Traffic,91941,0,True,2026,3,September,2026,3,September,37
+1138420468,2026-09-10,2026-09-10,Plumbing Service,Tub/Shower Faucet,Completed,Branded Phone Number,Local 619,91977,198,True,2026,3,September,2026,3,September,37
+1138423050,2026-09-10,2026-09-14,Plumbing Sales,Water Filtration Estimate,Completed,Account,Work Order,92082,0,True,2026,3,September,2026,3,September,37
+1138428114,2026-09-10,,HVAC Service,Diagnosis,Scheduled,Branded Phone Number,A1-800-BILL HOWE,92037,0,True,2026,3,September,2026,3,September,37
+1138430714,2026-09-10,,HVAC Service,Diagnosis,Scheduled,PPC,Google | Search | HVAC,92120,0,True,2026,3,September,2026,3,September,37
+1138432506,2026-09-10,2026-09-11,Plumbing Sales,Drain Estimate,Completed,PPC,Google | Search | Brand,92122,0,False,2026,3,September,2026,3,September,37
+1138497726,2026-09-10,,Plumbing Maintenance,Backflow Test,Scheduled,Branded Phone Number,Local 619,92103,0,True,2026,3,September,2026,3,September,37
+1138498787,2026-09-10,2026-09-11,Plumbing Service,Lavatory Stop,Completed,Email,Legacy Email Marketing Multiple Offers,92069,1516,True,2026,3,September,2026,3,September,37
+1138522723,2026-09-10,,HVAC Service,Diagnosis,Scheduled,Branded Phone Number,A1-800-BILL HOWE,92111,0,True,2026,3,September,2026,3,September,37
+1138538088,2026-09-10,2026-09-10,HVAC Service,A/C Repair,Completed,Organic Search,DuckDuckGo Organic,92117,1192.84,True,2026,3,September,2026,3,September,37
+1138538909,2026-09-10,,HVAC Service,A/C Repair,Scheduled,PPC,Google | Search | HVAC,92130,0,True,2026,3,September,2026,3,September,37
+1138544878,2026-09-10,2026-09-11,HVAC Maintenance,Preventative Maintenance,Canceled,PPC,Google | PMAX | HVAC,91915,0,True,2026,3,September,2026,3,September,37
+1138545646,2026-09-10,2026-09-11,Plumbing Sales,Plumbing Estimate,Completed,Sameday AI,Sameday AI,92127,0,True,2026,3,September,2026,3,September,37
+313069477,2026-09-10,2026-09-11,Plumbing Sales,Drain Repipe/Reroute,Completed,Direct Web Traffic,Direct Web Traffic,92120,0,False,2026,3,September,2026,3,September,37
+31538527,2026-09-10,,HVAC Sales,HVAC Estimate,Scheduled,Direct Web Traffic,Direct Web Traffic,92118,0,True,2026,3,September,2026,3,September,37
+31560475,2026-09-10,2026-09-14,HVAC Service,Diagnosis,Canceled,Branded Phone Number,Local 619,92009,0,True,2026,3,September,2026,3,September,37
+31570534,2026-09-10,2026-09-11,Plumbing Service,Disposal,Completed,Organic Search,Google Organic,92123,530,True,2026,3,September,2026,3,September,37
+31641422,2026-09-10,2026-09-10,Plumbing Sales,Gas Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92019,287,True,2026,3,September,2026,3,September,37
+31667283,2026-09-10,2026-09-11,Plumbing Service,Sewer Smell,Completed,Direct Web Traffic,Direct Web Traffic,92128,0,True,2026,3,September,2026,3,September,37
+31685266,2026-09-10,,Lining Install - CA,Lining Estimate,Scheduled,Manufacturer Referral,NuFlow Leads,92124,0,True,2026,3,September,2026,3,September,37
+31692766,2026-09-10,2026-09-10,Plumbing Service,Pipe Leak,Completed,Sameday AI,Sameday AI,92126,0,True,2026,3,September,2026,3,September,37
+31732908,2026-09-10,2026-09-14,HVAC Service,Diagnosis,Canceled,Direct Web Traffic,Direct Web Traffic,92124,0,True,2026,3,September,2026,3,September,37
+31733760,2026-09-10,2026-09-17,Plumbing Service,Tub/Shower Faucet,Completed,Organic Search,Google Organic,92111,580,True,2026,3,September,2026,3,September,37
+486291503,2026-09-10,2026-09-11,Plumbing Service,Tub/Shower Faucet,Completed,Branded Phone Number,Local 619,92130,0,True,2026,3,September,2026,3,September,37
+57878232,2026-09-10,2026-09-10,Plumbing Service,Pipe Leak,Completed,Google Business Profiles,GMB_SanDiego,92122,248,True,2026,3,September,2026,3,September,37
+1138352953,2026-09-11,2026-09-14,HVAC Service,Diagnosis,Completed,CSR Outbound,$1 OUTBOUND (use this for out-bounding),92124,940.53,True,2026,3,September,2026,3,September,37
+1138549236,2026-09-11,2026-09-12,Plumbing Service,Pipe Leak,Canceled,Direct Web Traffic,Direct Web Traffic,92126,0,True,2026,3,September,2026,3,September,37
+1138555118,2026-09-11,,HVAC Service,Diagnosis,Scheduled,Direct Web Traffic,Direct Web Traffic,92128,0,True,2026,3,September,2026,3,September,37
+1138556476,2026-09-11,2026-09-18,Plumbing Service,Mainline Stop,Completed,Branded Phone Number,A1-800-BILL HOWE,92120,0,True,2026,3,September,2026,3,September,37
+1138556915,2026-09-11,2026-09-11,Plumbing Service,Toilet Stop,Completed,Google LSA,Google Local Services,92115,102,True,2026,3,September,2026,3,September,37
+1138566239,2026-09-11,2026-09-14,Plumbing Sales,Drain Estimate,Completed,Branded Phone Number,Local 619,92110,0,False,2026,3,September,2026,3,September,37
+1138568613,2026-09-11,2026-09-15,HVAC Sales,HVAC Estimate,Completed,External Referral,Referral,92019,0,True,2026,3,September,2026,3,September,37
+1138579395,2026-09-11,,HVAC Sales,HVAC Estimate,Scheduled,PPC,Google | PMAX | HVAC,92131,0,True,2026,3,September,2026,3,September,37
+1139738876,2026-09-11,,Plumbing Service,Lavatory Faucet,Hold,Direct Web Traffic,Direct Web Traffic,92110,0,True,2026,3,September,2026,3,September,37
+1139743838,2026-09-11,2026-09-11,Plumbing Sales,Tankless Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92114,0,True,2026,3,September,2026,3,September,37
+1139771354,2026-09-11,2026-09-14,Plumbing Sales,Plumbing Estimate,Completed,Website,Email Contact Form,92108,0,True,2026,3,September,2026,3,September,37
+1139777128,2026-09-11,2026-09-11,Plumbing Service,Mainline Stop,Completed,PPC,Google | Search | Brand,92071,0,True,2026,3,September,2026,3,September,37
+1139801978,2026-09-11,2026-09-15,Plumbing Maintenance,Backflow Test,Canceled,Branded Phone Number,Local 619,92105,0,True,2026,3,September,2026,3,September,37
+1139817283,2026-09-11,2026-09-17,Plumbing Service,Sewer Camera,Canceled,Outbound SMS,ST Outbound Text Lines,92115,0,True,2026,3,September,2026,3,September,37
+1139882050,2026-09-11,2026-09-11,Plumbing Service,Water Heater Repair - Residential,Completed,Google Business Profiles,GMB_SanDiego,92117,0,True,2026,3,September,2026,3,September,37
+1139885173,2026-09-11,2026-09-12,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | HVAC,92128,0,True,2026,3,September,2026,3,September,37
+1139888517,2026-09-11,2026-09-14,Plumbing Service,Water Heater Repair - Residential,Completed,PPC,Google | Search | Plumbing,91914,0,True,2026,3,September,2026,3,September,37
+1139898611,2026-09-11,2026-09-11,Plumbing Service,Floor Drain Stop,Completed,PPC,Google | PMAX | Drains,92069,394,True,2026,3,September,2026,3,September,37
+1139910494,2026-09-11,,HVAC Sales,HVAC Estimate,Scheduled,Direct Web Traffic,Direct Web Traffic,92131,0,True,2026,3,September,2026,3,September,37
+31568354,2026-09-11,,HVAC Sales,HVAC Estimate,Scheduled,Direct Web Traffic,Direct Web Traffic,91902,0,True,2026,3,September,2026,3,September,37
+31666051,2026-09-11,2026-09-11,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Brand,92011,250,True,2026,3,September,2026,3,September,37
+31672789,2026-09-11,,Plumbing Service,Dishwasher,Hold,Branded Phone Number,A1-800-BILL HOWE,92117,0,True,2026,3,September,2026,3,September,37
+31703992,2026-09-11,2026-09-14,Lining Install - CA,Lining Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92103,0,False,2026,3,September,2026,3,September,37
+31731823,2026-09-11,2026-09-11,HVAC Service,A/C Repair,Canceled,PPC,Google | Search | HVAC,91945,0,True,2026,3,September,2026,3,September,37
+64364619,2026-09-11,,HVAC Sales,HVAC Estimate,Scheduled,Branded Phone Number,A1-800-BILL HOWE,92117,0,True,2026,3,September,2026,3,September,37
+97588537,2026-09-11,2026-09-11,Plumbing Service,Pipe Leak,Completed,Branded Phone Number,A1-800-BILL HOWE,92106,233,True,2026,3,September,2026,3,September,37
+1139915025,2026-09-12,2026-09-12,HVAC Service,Diagnosis,Canceled,Google LSA,Google Local Services,92037,0,True,2026,3,September,2026,3,September,37
+1139915337,2026-09-12,2026-09-12,Plumbing Service,Gas Leak,Completed,PPC,Google | Search | Plumbing,92118,250,True,2026,3,September,2026,3,September,37
+1139915784,2026-09-12,2026-09-14,Plumbing Service,Toilet Leak,Completed,Organic Search,Chat - Service Titan,92117,1760,True,2026,3,September,2026,3,September,37
+1139950202,2026-09-12,,HVAC Service,Diagnosis,Scheduled,PPC,Google | Search | HVAC,91913,0,True,2026,3,September,2026,3,September,37
+1139950526,2026-09-12,2026-09-14,Plumbing Service,Laundry Bibbs,Completed,Direct Web Traffic,Direct Web Traffic,92127,0,True,2026,3,September,2026,3,September,37
+1139950987,2026-09-12,2026-09-14,Plumbing Service,Tankless Service,Completed,PPC,Google | Search | Brand,92009,0,False,2026,3,September,2026,3,September,37
+1139951184,2026-09-12,2026-09-12,Plumbing Service,Slab Leak,Completed,Yelp,Yelp,92128,250,True,2026,3,September,2026,3,September,37
+1139951517,2026-09-12,2026-09-12,Plumbing Service,Angle Stop,Completed,PPC,Google | Search | Brand,91932,1272,True,2026,3,September,2026,3,September,37
+1139966097,2026-09-12,2026-09-15,Plumbing Sales,Drain Estimate,Completed,Google Business Profiles,GMB_SanDiego,92111,0,False,2026,3,September,2026,3,September,37
+1139966145,2026-09-12,2026-09-14,Plumbing Service,Mainline Stop,Completed,PPC,Google | Search | Brand,92120,175,True,2026,3,September,2026,3,September,37
+1139966757,2026-09-12,,HVAC Service,Diagnosis,Scheduled,Branded Phone Number,Local 619,92120,0,True,2026,3,September,2026,3,September,37
+1139967951,2026-09-12,2026-09-14,Plumbing Service,Toilet Leak,Hold,Google Business Profiles,GMB_SanDiego,92103,0,True,2026,3,September,2026,3,September,37
+31569944,2026-09-12,2026-09-12,Plumbing Service,Mainline Stop,Completed,PPC,Google | Search | Brand,92037,352,True,2026,3,September,2026,3,September,37
+31679358,2026-09-12,2026-09-12,Plumbing Service,Reset Toilet,Completed,Branded Phone Number,A1-800-BILL HOWE,92109,496,True,2026,3,September,2026,3,September,37
+31707921,2026-09-12,2026-09-12,Plumbing Service,Toilet Leak,Canceled,PPC,Google | Search | Plumbing,92117,0,True,2026,3,September,2026,3,September,37
+50374980,2026-09-12,2026-09-12,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Brand,92037,0,True,2026,3,September,2026,3,September,37
+1139910940,2026-09-13,2026-09-14,Plumbing Service,Tankless Service,Completed,Sameday AI,Sameday AI,92127,350,True,2026,3,September,2026,3,September,37
+1139911170,2026-09-13,,HVAC Service,Diagnosis,Scheduled,Sameday AI,Sameday AI,92108,0,True,2026,3,September,2026,3,September,37
+1139911180,2026-09-13,2026-09-15,Plumbing Service,Ice Maker Line,Completed,Direct Web Traffic,Direct Web Traffic,92104,0,True,2026,3,September,2026,3,September,37
+1139980663,2026-09-13,2026-09-13,Plumbing Service,Lavatory Stop,Completed,Google LSA,Google Local Services,92127,394,True,2026,3,September,2026,3,September,37
+1139980694,2026-09-13,2026-09-13,HVAC Service,A/C Repair,Completed,Google LSA,Google Local Services,92075,225,True,2026,3,September,2026,3,September,37
+1139981098,2026-09-13,2026-09-13,Plumbing Install,Water Heater Install - Residential,Canceled,Google Business Profiles,GMB_SanDiego,91935,0,True,2026,3,September,2026,3,September,37
+1139981566,2026-09-13,2026-09-14,HVAC Service,Diagnosis,Completed,Google LSA,Google Local Services,92121,0,False,2026,3,September,2026,3,September,37
+1139981694,2026-09-13,2026-09-13,Plumbing Service,Water Heater Repair - Residential,Completed,Organic Search,Google Organic,92127,470,True,2026,3,September,2026,3,September,37
+1139981738,2026-09-13,2026-09-13,Plumbing Service,Toilet Stop,Canceled,Google LSA,Google Local Services,92107,0,True,2026,3,September,2026,3,September,37
+1139982040,2026-09-13,2026-09-13,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Plumbing,92024,682,True,2026,3,September,2026,3,September,37
+1139982176,2026-09-13,2026-09-13,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Brand,92130,975,True,2026,3,September,2026,3,September,37
+1139985902,2026-09-13,2026-09-17,Plumbing Service,Lavatory Stop,Completed,PPC,Google | Search | Plumbing,92064,348,True,2026,3,September,2026,3,September,37
+1139991710,2026-09-13,2026-09-16,Plumbing Service,Tub/Shower Stop,Completed,Direct Web Traffic,Direct Web Traffic,92103,102,True,2026,3,September,2026,3,September,37
+1139992766,2026-09-13,,Plumbing Service,Reset Toilet,Hold,Google LSA,Google Local Services,92109,0,True,2026,3,September,2026,3,September,37
+1139993193,2026-09-13,2026-09-15,Lining Install - CA,Lining Estimate,Completed,Organic Search,Google Organic,92117,0,True,2026,3,September,2026,3,September,37
+1139995582,2026-09-13,2026-09-13,Plumbing Service,Leak Below Lavatory,Completed,Website,Website Phone Calls,92127,394,True,2026,3,September,2026,3,September,37
+1139997807,2026-09-13,2026-09-15,Plumbing Service,Slab Leak,Completed,PPC,Google | Search | Plumbing,91978,0,True,2026,3,September,2026,3,September,37
+290096440,2026-09-13,2026-09-16,Plumbing Service,Pipe Leak,Completed,Organic Search,Google Organic,92131,7485,True,2026,3,September,2026,3,September,37
+31567936,2026-09-13,2026-09-14,Plumbing Service,Tub/Shower Stop,Completed,PPC,Google | Search | Brand,92110,144,True,2026,3,September,2026,3,September,37
+31709673,2026-09-13,2026-09-14,Plumbing Service,Water Heater Repair - Residential,Completed,PPC,Google | PMAX | Plumbing - Spanish,92009,250,True,2026,3,September,2026,3,September,37
+31710855,2026-09-13,2026-09-13,Plumbing Service,Lavatory Stop,Completed,Branded Phone Number,Local 619,91911,917,True,2026,3,September,2026,3,September,37
+31718957,2026-09-13,2026-09-16,HVAC Service,10+ HVAC Unit,Canceled,Google Business Profiles,GMB_SanDiego,92101,0,True,2026,3,September,2026,3,September,37
+31734049,2026-09-13,2026-09-14,Plumbing Service,PRV,Completed,PPC,Google | Search | Plumbing,92037,976,True,2026,3,September,2026,3,September,37
+45915724,2026-09-13,2026-09-14,Plumbing Service,Water Heater Repair - Residential,Completed,PPC,Google | Search | Brand,91950,0,False,2026,3,September,2026,3,September,37
+93346782,2026-09-13,2026-09-14,Plumbing Install,Water Heater Install - Residential,Canceled,PPC,Bing | Search | Brand,92021,0,True,2026,3,September,2026,3,September,37
+1139910570,2026-09-14,2026-09-16,Plumbing Service,Combo,Completed,Sameday AI,Sameday AI,92131,0,False,2026,3,September,2026,3,September,38
+1139949942,2026-09-14,,HVAC Service,Diagnosis,Scheduled,Direct Web Traffic,Direct Web Traffic,92110,0,True,2026,3,September,2026,3,September,38
+1140001578,2026-09-14,2026-09-15,Plumbing Service,Laundry Bibbs,Canceled,PPC,Google | PMAX | Drains,92009,0,True,2026,3,September,2026,3,September,38
+1140003167,2026-09-14,2026-09-14,Plumbing Service,Disposal,Completed,Organic Search,Google Organic,92009,525,True,2026,3,September,2026,3,September,38
+1140003502,2026-09-14,2026-09-14,Plumbing Service,Toilet Leak,Completed,Branded Phone Number,A1-800-BILL HOWE,92102,0,True,2026,3,September,2026,3,September,38
+1140011742,2026-09-14,,HVAC Service,Diagnosis,Scheduled,Google Business Profiles,GMB_SanDiego,91914,0,True,2026,3,September,2026,3,September,38
+1140016813,2026-09-14,2026-09-14,Plumbing Sales,Drain Estimate,Completed,Google LSA,Google Local Services,92121,0,False,2026,3,September,2026,3,September,38
+1140019657,2026-09-14,2026-09-14,Plumbing Sales,Backflow Install Estimate,Completed,Google Business Profiles,GMB_SanDiego,92117,0,True,2026,3,September,2026,3,September,38
+1140024311,2026-09-14,2026-09-17,Plumbing Service,Pipe Leak,Completed,Organic Search,Yahoo Organic,92118,0,True,2026,3,September,2026,3,September,38
+1140024327,2026-09-14,2026-09-15,Plumbing Service,Toilet Leak,Completed,Branded Phone Number,A1-800-BILL HOWE,92119,483.55,True,2026,3,September,2026,3,September,38
+1140030396,2026-09-14,2026-09-14,Plumbing Service,Toilet Stop,Canceled,PPC,Google | Search | Brand,92116,0,True,2026,3,September,2026,3,September,38
+1140036321,2026-09-14,2026-09-15,Plumbing Service,Drain Repair,Completed,Yelp,Yelp,92067,0,True,2026,3,September,2026,3,September,38
+1140038047,2026-09-14,2026-09-15,Plumbing Sales,Water Heater Estimate - Residential,Completed,Yelp,Yelp,92057,0,True,2026,3,September,2026,3,September,38
+1140055723,2026-09-14,2026-09-15,Plumbing Sales,Moen Flo Estimate,Completed,Branded Phone Number,A1-800-BILL HOWE,92037,0,True,2026,3,September,2026,3,September,38
+1140057702,2026-09-14,,HVAC Maintenance,Preventative Maintenance,Hold,Google Business Profiles,GMB_SanDiego,92117,0,True,2026,3,September,2026,3,September,38
+1140063099,2026-09-14,2026-09-15,Plumbing Service,Plumbing Service,Completed,Google Business Profiles,GMB_SanDiego,92126,0,False,2026,3,September,2026,3,September,38
+1140071898,2026-09-14,2026-09-14,Plumbing Service,Plumbing Service,Canceled,Organic Search,Google Organic,92019,0,True,2026,3,September,2026,3,September,38
+1140072207,2026-09-14,2026-09-17,Plumbing Sales,Water Heater Estimate - Residential,Canceled,PPC,Google | Search | Plumbing,92116,0,True,2026,3,September,2026,3,September,38
+1140072292,2026-09-14,,Plumbing Service,Lavatory Faucet,Hold,PPC,Google | Search | Brand,92037,0,True,2026,3,September,2026,3,September,38
+1140076537,2026-09-14,2026-09-16,Plumbing Sales,Water Heater Estimate - Residential,Completed,Organic Search,Google Organic,92127,0,True,2026,3,September,2026,3,September,38
+1140077833,2026-09-14,2026-09-18,Plumbing Service,Tub/Shower Faucet,Completed,PPC,Google | Search | Brand,92011,265,True,2026,3,September,2026,3,September,38
+1140081198,2026-09-14,2026-09-15,Plumbing Maintenance,Backflow Test,Canceled,Email,Legacy Email Marketing Multiple Offers,92113,0,True,2026,3,September,2026,3,September,38
+1140088631,2026-09-14,,HVAC Sales,HVAC Estimate,Scheduled,Direct Web Traffic,Direct Web Traffic,91910,0,True,2026,3,September,2026,3,September,38
+1140089704,2026-09-14,2026-09-17,Plumbing Maintenance,Backflow Test,Completed,PPC,Google | PMAX | Drains,91950,104,True,2026,3,September,2026,3,September,38
+1140092900,2026-09-14,,HVAC Maintenance,Preventative Maintenance,Scheduled,Google Business Profiles,GMB_SanDiego,92127,0,True,2026,3,September,2026,3,September,38
+1140092982,2026-09-14,2026-09-17,Plumbing Service,Backflow Repair,Completed,Branded Phone Number,Local 619,92130,0,False,2026,3,September,2026,3,September,38
+1140094341,2026-09-14,2026-09-14,Plumbing Service,Sewer Camera,Completed,Branded Phone Number,Local 619,92115,0,False,2026,3,September,2026,3,September,38
+1140108670,2026-09-14,2026-09-15,Plumbing Service,Tankless Service,Completed,Email,Legacy Email Marketing Multiple Offers,92103,765.7,True,2026,3,September,2026,3,September,38
+1140114499,2026-09-14,2026-09-15,Plumbing Service,Mainline Stop,Completed,PPC,Google | Search | Plumbing,92117,102,True,2026,3,September,2026,3,September,38
+1140127222,2026-09-14,,Plumbing Service,Disposal,Scheduled,PPC,Google | Search | Brand,92129,0,True,2026,3,September,2026,3,September,38
+1140127973,2026-09-14,,HVAC Sales,HVAC Estimate,Scheduled,Email,Legacy Email Marketing Multiple Offers,92127,0,True,2026,3,September,2026,3,September,38
+1140129291,2026-09-14,2026-09-17,Plumbing Service,Water Filtration Repair,Completed,Organic Search,Google Organic,92120,0,True,2026,3,September,2026,3,September,38
+1140143313,2026-09-14,2026-09-17,Plumbing Service,Plumbing Service,Completed,Google Business Profiles,GMB_SanDiego,92116,0,False,2026,3,September,2026,3,September,38
+1140154831,2026-09-14,,Plumbing Service,Plumbing Service,Scheduled,CSR Outbound,$1 OUTBOUND (use this for out-bounding),92101,0,True,2026,3,September,2026,3,September,38
+1140157040,2026-09-14,2026-09-15,Plumbing Sales,Plumbing Estimate,Completed,Yelp,Yelp,92154,0,False,2026,3,September,2026,3,September,38
+285371048,2026-09-14,2026-09-14,Plumbing Service,Water Heater Repair - Residential,Completed,Google Business Profiles,GMB_SanDiego,92113,220,True,2026,3,September,2026,3,September,38
+31579189,2026-09-14,2026-09-14,Plumbing Service,Lavatory Faucet,Completed,Google Business Profiles,GMB_SanDiego,92124,1279,True,2026,3,September,2026,3,September,38
+31582873,2026-09-14,2026-09-15,Lining Install - CA,Sewer Camera Post Lining,Completed,Branded Phone Number,Local 619,92037,0,True,2026,3,September,2026,3,September,38
+31654963,2026-09-14,,Plumbing Sales,Plumbing Estimate,Scheduled,Google Business Profiles,GMB_SanDiego,92021,0,True,2026,3,September,2026,3,September,38
+31690493,2026-09-14,2026-09-14,Plumbing Service,Upper/Lower Leak,Completed,PPC,Google | Search | Plumbing,92027,586,True,2026,3,September,2026,3,September,38
+31708056,2026-09-14,2026-09-15,Plumbing Service,PRV,Completed,Google Business Profiles,GMB_SanDiego,92037,714,True,2026,3,September,2026,3,September,38
+31720245,2026-09-14,2026-09-14,Plumbing Service,Water Heater Repair - Residential,Completed,Branded Phone Number,Local 619,92110,424,True,2026,3,September,2026,3,September,38
+31722623,2026-09-14,2026-09-14,Plumbing Service,Drain Repair,Canceled,Branded Phone Number,A1-800-BILL HOWE,92104,0,True,2026,3,September,2026,3,September,38
+49260030,2026-09-14,,Plumbing Sales,Tankless Estimate,Hold,Direct Web Traffic,Direct Web Traffic,92084,0,True,2026,3,September,2026,3,September,38
+57297196,2026-09-14,2026-09-17,Plumbing Service,Tub/Shower Faucet,Completed,Direct Web Traffic,Direct Web Traffic,92122,220,True,2026,3,September,2026,3,September,38
+98325365,2026-09-14,2026-09-15,Plumbing Service,Toilet Install,Completed,PPC,Google | Search | Plumbing,92104,0,True,2026,3,September,2026,3,September,38
+1139950902,2026-09-15,,Plumbing Service,Leak Below Kitchen,Hold,PPC,Google | PMAX | Plumbing,92014,0,True,2026,3,September,2026,3,September,38
+1140003230,2026-09-15,2026-09-16,Plumbing Sales,Repipe/Reroute Estimate,Completed,Google Business Profiles,GMB_SanDiego,92117,0,True,2026,3,September,2026,3,September,38
+1140017824,2026-09-15,2026-09-15,Plumbing Sales,Plumbing Estimate,Completed,PPC,Google | Search | Brand,92119,0,True,2026,3,September,2026,3,September,38
+1140136071,2026-09-15,2026-09-16,Plumbing Service,Toilet Leak,Completed,PPC,Google | PMAX | Plumbing,92101,557,True,2026,3,September,2026,3,September,38
+1140187218,2026-09-15,,HVAC Service,Diagnosis,Scheduled,PPC,Google | Search | HVAC,92101,0,True,2026,3,September,2026,3,September,38
+1140194061,2026-09-15,2026-09-16,Plumbing Sales,Gas Estimate,Completed,Google Business Profiles,GMB_SanDiego,92114,0,True,2026,3,September,2026,3,September,38
+1140197086,2026-09-15,2026-09-17,Plumbing Service,Toilet Stop,Completed,PPC,Google | Search | Plumbing,92127,1273,True,2026,3,September,2026,3,September,38
+1140213916,2026-09-15,2026-09-16,Plumbing Sales,Plumbing Estimate,Completed,Direct Web Traffic,Direct Web Traffic,92106,0,True,2026,3,September,2026,3,September,38
+1140220344,2026-09-15,2026-09-15,Lining Install - CA,Lining Estimate,Completed,Google LSA,Google Local Services,91977,0,False,2026,3,September,2026,3,September,38
+1140224502,2026-09-15,2026-09-15,Plumbing Service,Tub/Shower Stop,Canceled,Direct Web Traffic,Direct Web Traffic,92123,0,True,2026,3,September,2026,3,September,38
+1141328800,2026-09-15,2026-09-16,Plumbing Service,Gas Leak,Completed,Email,Legacy Email Marketing Multiple Offers,92103,424,True,2026,3,September,2026,3,September,38
+1141340162,2026-09-15,2026-09-15,HVAC Service,Diagnosis,Canceled,Google LSA,Google Local Services,92124,0,True,2026,3,September,2026,3,September,38
+1141344233,2026-09-15,2026-09-16,Plumbing Service,Angle Stop,Completed,Email,Legacy Email Marketing Multiple Offers,92111,200,True,2026,3,September,2026,3,September,38
+1141558291,2026-09-15,2026-09-15,Plumbing Service,Mainline Stop,Completed,Email,Legacy Email Marketing Multiple Offers,92105,175,True,2026,3,September,2026,3,September,38
+1141562112,2026-09-15,2026-09-17,Lining Install - CA,Lining Estimate,Completed,Manufacturer Referral,NuFlow Leads,92111,0,True,2026,3,September,2026,3,September,38
+1141598468,2026-09-15,2026-09-18,Plumbing Sales,Drain Estimate,Completed,Google Business Profiles,GMB_SanDiego,92119,0,False,2026,3,September,2026,3,September,38
+1141599872,2026-09-15,2026-09-15,Restoration EMS,EMS Estimate,Completed,Paid Social,Nextdoor,92011,0,False,2026,3,September,2026,3,September,38
+1141610784,2026-09-15,2026-09-18,HVAC Sales,HVAC Estimate,Completed,Organic Search,Google Organic,92078,0,True,2026,3,September,2026,3,September,38
+1141628383,2026-09-15,,HVAC Sales,HVAC Estimate,Scheduled,Branded Phone Number,Local 619,92126,0,True,2026,3,September,2026,3,September,38
+1141641881,2026-09-15,2026-09-16,Plumbing Sales,Plumbing Estimate,Completed,Google Business Profiles,GMB_SanDiego,92111,0,False,2026,3,September,2026,3,September,38
+1141641992,2026-09-15,2026-09-16,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Brand,92116,0,True,2026,3,September,2026,3,September,38
+1141645406,2026-09-15,,HVAC Sales,HVAC Estimate,Scheduled,PPC,Google | PMAX | HVAC,92021,0,True,2026,3,September,2026,3,September,38
+1141646306,2026-09-15,,Plumbing Service,Tub/Shower Faucet,Hold,PPC,Google | PMAX | Drains,92009,220,True,2026,3,September,2026,3,September,38
+1141655902,2026-09-15,2026-09-16,Plumbing Sales,Water Heater Estimate - Residential,Canceled,Direct Web Traffic,Direct Web Traffic,92040,0,True,2026,3,September,2026,3,September,38
+286988328,2026-09-15,2026-09-16,Plumbing Service,Pipe Leak,Completed,Google Business Profiles,GMB_SanDiego,92104,0,True,2026,3,September,2026,3,September,38
+311416237,2026-09-15,2026-09-16,HVAC Service,Diagnosis,Canceled,PPC,Google | Search | Brand,92027,0,True,2026,3,September,2026,3,September,38
+31664143,2026-09-15,2026-09-15,Plumbing Service,Leak Below Kitchen,Canceled,Branded Phone Number,Local 619,92130,0,True,2026,3,September,2026,3,September,38
+31691411,2026-09-15,2026-09-17,Plumbing Service,Lavatory Faucet,Completed,Organic Search,Google Organic,92040,0,True,2026,3,September,2026,3,September,38
+1141658846,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,Branded Phone Number,Local 619,91913,0,True,2026,3,September,2026,3,September,38
+1141668495,2026-09-16,2026-09-16,Plumbing Service,Laundry Bibbs,Completed,Google Business Profiles,GMB_SanDiego,92118,0,True,2026,3,September,2026,3,September,38
+1141688424,2026-09-16,,Plumbing Service,Leak Below Kitchen,Hold,Google LSA,Google Local Services,92131,318,True,2026,3,September,2026,3,September,38
+1141694855,2026-09-16,2026-09-18,Plumbing Service,Tub/Shower Faucet,Completed,Google Business Profiles,GMB_SanDiego,92019,1597,True,2026,3,September,2026,3,September,38
+1141701019,2026-09-16,2026-09-16,Plumbing Sales,Water Heater Estimate - Residential,Completed,Google Business Profiles,GMB_SanDiego,91910,0,True,2026,3,September,2026,3,September,38
+1141749650,2026-09-16,2026-09-17,Plumbing Service,Pipe Leak,Completed,Branded Phone Number,A1-800-BILL HOWE,92064,0,False,2026,3,September,2026,3,September,38
+1141751838,2026-09-16,,HVAC Service,Diagnosis,Hold,Branded Phone Number,Local 619,92118,0,True,2026,3,September,2026,3,September,38
+1141753814,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,Google Business Profiles,GMB_SanDiego,92071,0,True,2026,3,September,2026,3,September,38
+1141755435,2026-09-16,2026-09-17,Plumbing Sales,Water Heater Estimate - Residential,Completed,PPC,Google | PMAX | Drains,92067,0,False,2026,3,September,2026,3,September,38
+1141763312,2026-09-16,2026-09-18,Plumbing Service,Leak Below Kitchen,Completed,Branded Phone Number,Local 619,92014,318,True,2026,3,September,2026,3,September,38
+1141769740,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,PPC,Google | Search | HVAC,92069,0,True,2026,3,September,2026,3,September,38
+1141792273,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,Google Business Profiles,GMB_Poway,92127,0,True,2026,3,September,2026,3,September,38
+1141799739,2026-09-16,,Plumbing Maintenance,Backflow Test,Scheduled,Branded Phone Number,Local 619,92029,0,True,2026,3,September,2026,3,September,38
+1141802371,2026-09-16,2026-09-17,Plumbing Service,Pipe Leak,Completed,Branded Phone Number,A1-800-BILL HOWE,92101,0,True,2026,3,September,2026,3,September,38
+1141804918,2026-09-16,2026-09-16,HVAC Maintenance,Preventative Maintenance,Canceled,PPC,Google | Search | Brand,92111,0,True,2026,3,September,2026,3,September,38
+1141807231,2026-09-16,2026-09-17,Plumbing Service,Water Heater Repair - Residential,Completed,PPC,Google | PMAX | Plumbing,92114,212,True,2026,3,September,2026,3,September,38
+1141830303,2026-09-16,2026-09-17,Plumbing Service,R/O System,Completed,Google Business Profiles,GMB_SanDiego,92101,212,True,2026,3,September,2026,3,September,38
+1141844470,2026-09-16,2026-09-16,Plumbing Service,Plumbing Service,Canceled,Google LSA,Google Local Services,92128,0,True,2026,3,September,2026,3,September,38
+1141888548,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,Yelp,Yelp,92075,0,True,2026,3,September,2026,3,September,38
+1141891612,2026-09-16,,Plumbing Sales,Water Filtration Estimate,Scheduled,Branded Phone Number,Local 619,92091,0,True,2026,3,September,2026,3,September,38
+1141892812,2026-09-16,,Plumbing Maintenance,Recurring Services: Backflow Test,Scheduled,CSR Outbound,$1 OUTBOUND (use this for out-bounding),92109,0,True,2026,3,September,2026,3,September,38
+1141894494,2026-09-16,2026-09-18,Plumbing Service,Leak Below Kitchen,Completed,Sameday AI,Sameday AI,92040,555.3,True,2026,3,September,2026,3,September,38
+1141926565,2026-09-16,2026-09-16,Plumbing Sales,Water Heater Estimate - Residential,Completed,PPC,Google | PMAX | Plumbing,92115,250,True,2026,3,September,2026,3,September,38
+1141934942,2026-09-16,2026-09-17,Plumbing Service,Mainline Stop,Canceled,PPC,Google | Search | Competitor,92078,0,True,2026,3,September,2026,3,September,38
+1141942110,2026-09-16,2026-09-18,Plumbing Service,Water Heater Repair - Residential,Completed,Business Directories,Rinnai Listing,92115,0,False,2026,3,September,2026,3,September,38
+1141945566,2026-09-16,2026-09-17,HVAC Sales,HVAC Estimate,Completed,Sameday AI,Sameday AI,92075,0,True,2026,3,September,2026,3,September,38
+307737062,2026-09-16,,Plumbing Service,Water Filtration Repair,Hold,Email,Legacy Email Marketing Multiple Offers,92130,350,True,2026,3,September,2026,3,September,38
+311315353,2026-09-16,,HVAC Service,Diagnosis,Scheduled,Direct Web Traffic,Direct Web Traffic,91941,0,True,2026,3,September,2026,3,September,38
+31648213,2026-09-16,2026-09-17,Plumbing Service,Laundry Bibbs,Completed,Branded Phone Number,A1-800-BILL HOWE,92120,248.4,True,2026,3,September,2026,3,September,38
+31705931,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,Direct Web Traffic,Direct Web Traffic,92104,0,True,2026,3,September,2026,3,September,38
+31724576,2026-09-16,2026-09-17,Plumbing Service,Laundry Stop,Completed,Yelp,Yelp,91911,144,True,2026,3,September,2026,3,September,38
+47463512,2026-09-16,2026-09-17,Plumbing Service,Dishwasher,Completed,Branded Phone Number,A1-800-BILL HOWE,92037,102,True,2026,3,September,2026,3,September,38
+61697046,2026-09-16,,HVAC Sales,HVAC Estimate,Scheduled,PPC,Google | PMAX | Plumbing - Spanish,92127,0,True,2026,3,September,2026,3,September,38
+1141957320,2026-09-17,2026-09-18,Plumbing Service,Kitchen Stop,Completed,Google LSA,Google Local Services,92007,102,True,2026,3,September,2026,3,September,38
+1141959073,2026-09-17,2026-09-18,Plumbing Service,Leak Below Lavatory,Completed,Google LSA,Google Local Services,92121,144,True,2026,3,September,2026,3,September,38
+1141963561,2026-09-17,2026-09-17,Plumbing Service,Toilet Stop,Completed,PPC,Bing | Search | Brand,92064,1273,True,2026,3,September,2026,3,September,38
+1141975010,2026-09-17,2026-09-17,Plumbing Service,Pipe Leak,Completed,Branded Phone Number,A1-800-BILL HOWE,91942,0,True,2026,3,September,2026,3,September,38
+1142017152,2026-09-17,,HVAC Sales,HVAC Estimate,Scheduled,Google Business Profiles,GMB_SanDiego,92037,0,True,2026,3,September,2026,3,September,38
+1142017246,2026-09-17,,HVAC Sales,HVAC Estimate,Scheduled,PPC,Google | Search | Competitor,92130,0,True,2026,3,September,2026,3,September,38
+1142030658,2026-09-17,,HVAC Service,Diagnosis,Scheduled,Google Business Profiles,GMB_SanDiego,92116,0,True,2026,3,September,2026,3,September,38
+1142032003,2026-09-17,2026-09-17,Plumbing Service,Combo,Completed,PPC,Google | Search | Brand,92118,0,True,2026,3,September,2026,3,September,38
+1142040810,2026-09-17,2026-09-17,Plumbing Service,Mainline Stop,Completed,Branded Phone Number,A1-800-BILL HOWE,92024,102,True,2026,3,September,2026,3,September,38
+1142051097,2026-09-17,2026-09-18,HVAC Sales,HVAC Estimate,Completed,Email,Legacy Email Marketing Multiple Offers,92122,0,True,2026,3,September,2026,3,September,38
+1142080250,2026-09-17,2026-09-18,Plumbing Service,Kitchen Stop,Completed,PPC,Google | Search | Competitor,92067,246,True,2026,3,September,2026,3,September,38
+1142083985,2026-09-17,,Plumbing Service,Sewer Smell,Scheduled,Google Business Profiles,GMB_SanDiego,92131,0,True,2026,3,September,2026,3,September,38
+1142084424,2026-09-17,2026-09-18,Lining Install - CA,Lining Estimate,Completed,Google Business Profiles,GMB_SanDiego,92122,0,True,2026,3,September,2026,3,September,38
+1142086398,2026-09-17,2026-09-17,Plumbing Sales,Gas Estimate,Canceled,Organic Search,Google Organic,92114,0,True,2026,3,September,2026,3,September,38
+1142087272,2026-09-17,2026-09-18,Plumbing Service,Tub/Shower Faucet,Canceled,Google LSA,Google Local Services,92011,0,True,2026,3,September,2026,3,September,38
+1142120233,2026-09-17,2026-09-17,Plumbing Service,Tub/Shower Faucet,Completed,Email,Legacy Email Marketing Multiple Offers,92064,398,True,2026,3,September,2026,3,September,38
+1142139052,2026-09-17,2026-09-18,Plumbing Sales,Drain Estimate,Completed,Branded Phone Number,A1-800-BILL HOWE,92111,0,False,2026,3,September,2026,3,September,38
+1142149026,2026-09-17,2026-09-17,Plumbing Service,Gas Lock Out,Completed,Google LSA,Google Local Services,92103,0,False,2026,3,September,2026,3,September,38
+1142149903,2026-09-17,2026-09-18,Plumbing Sales,Plumbing Estimate,Canceled,Yelp,Yelp,92075,0,True,2026,3,September,2026,3,September,38
+1142152265,2026-09-17,2026-09-17,HVAC Service,10+ HVAC Unit,Canceled,Branded Phone Number,A1-800-BILL HOWE,92009,0,True,2026,3,September,2026,3,September,38
+1142155224,2026-09-17,2026-09-18,Plumbing Sales,Plumbing Estimate,Completed,PPC,Google | Search | Brand,92110,0,True,2026,3,September,2026,3,September,38
+1143332220,2026-09-17,2026-09-18,Plumbing Service,Plumbing Service,Completed,Google Business Profiles,GMB_SanDiego,92040,0,True,2026,3,September,2026,3,September,38
+1143337567,2026-09-17,2026-09-18,Plumbing Sales,Water Heater Estimate - Residential,Canceled,Google Business Profiles,GMB_SanDiego,92114,0,True,2026,3,September,2026,3,September,38
+1143340642,2026-09-17,2026-09-18,Plumbing Service,Pipe Leak,Completed,PPC,Google | PMAX | Plumbing,92128,471.6,True,2026,3,September,2026,3,September,38
+1143356016,2026-09-17,2026-09-18,Plumbing Service,Kitchen Stop,Canceled,Organic Search,Google Organic,92120,0,True,2026,3,September,2026,3,September,38
+31567703,2026-09-17,2026-09-17,Plumbing Service,Ice Maker Line,Completed,Google LSA,Google Local Services,92131,248,True,2026,3,September,2026,3,September,38
+31616809,2026-09-17,2026-09-17,HVAC Service,10+ HVAC Unit,Canceled,Google LSA,Google Local Services,92127,0,True,2026,3,September,2026,3,September,38
+31659616,2026-09-17,2026-09-17,Plumbing Service,Angle Stop,Completed,PPC,Google | Search | Plumbing,92139,0,True,2026,3,September,2026,3,September,38
+31698626,2026-09-17,2026-09-18,Plumbing Service,Plumbing Service,Completed,Google Business Profiles,GMB_SanDiego,92075,292,True,2026,3,September,2026,3,September,38
+31706901,2026-09-17,2026-09-18,HVAC Service,Diagnosis,Completed,Branded Phone Number,Local 619,92123,0,True,2026,3,September,2026,3,September,38
+31730606,2026-09-17,2026-09-18,Plumbing Service,Lavatory Faucet,Completed,Branded Phone Number,Local 619,92111,1234,True,2026,3,September,2026,3,September,38
+1143374686,2026-09-18,2026-09-18,Plumbing Sales,Plumbing Estimate,Completed,Organic Search,Google Organic,92123,0,True,2026,3,September,2026,3,September,38
+1143374721,2026-09-18,2026-09-18,Plumbing Service,Tankless Service,Completed,Direct Web Traffic,Direct Web Traffic,92029,1917,True,2026,3,September,2026,3,September,38
+1143377656,2026-09-18,,Plumbing Service,Sewer Camera,Scheduled,PPC,Google | Search | Brand,92130,0,True,2026,3,September,2026,3,September,38
+1143388317,2026-09-18,2026-09-18,Plumbing Sales,Plumbing Estimate,Completed,Google Business Profiles,GMB_SanDiego,92115,0,True,2026,3,September,2026,3,September,38
+1143389425,2026-09-18,,HVAC Sales,HVAC Estimate,Scheduled,PPC,Google | Search | Brand,92026,0,True,2026,3,September,2026,3,September,38
+1143395161,2026-09-18,,Plumbing Service,PRV,Scheduled,Branded Phone Number,Local 619,92130,0,True,2026,3,September,2026,3,September,38
+1143402063,2026-09-18,2026-09-18,HVAC Service,Diagnosis,Canceled,Yelp,Yelp,92128,0,True,2026,3,September,2026,3,September,38
+1143402758,2026-09-18,2026-09-18,Plumbing Service,Kitchen Stop,Completed,Google LSA,Google Local Services,91910,2300,True,2026,3,September,2026,3,September,38
+1143403739,2026-09-18,2026-09-18,Plumbing Service,Upper/Lower Leak,Completed,Organic Search,Google Organic,92130,220,True,2026,3,September,2026,3,September,38
+1143405116,2026-09-18,2026-09-18,Plumbing Service,Kitchen Stop,Completed,Branded Phone Number,Local 619,92007,102,True,2026,3,September,2026,3,September,38
+1143408863,2026-09-18,,Plumbing Service,Mainline Stop,Scheduled,PPC,Google | PMAX | Drains,92154,0,True,2026,3,September,2026,3,September,38
+1143413679,2026-09-18,2026-09-18,Plumbing Service,Slab Leak,Completed,Direct Web Traffic,Direct Web Traffic,92129,0,True,2026,3,September,2026,3,September,38
+1143414080,2026-09-18,2026-09-18,Plumbing Service,Ice Maker Line,Completed,Google LSA,Google Local Services,91910,225,True,2026,3,September,2026,3,September,38
+1143417438,2026-09-18,,Plumbing Service,R/O System,Scheduled,Sameday AI,Sameday AI,92075,0,True,2026,3,September,2026,3,September,38
+1143489488,2026-09-18,2026-09-18,Plumbing Sales,Plumbing Estimate,Canceled,Google Business Profiles,GMB_SanDiego,92118,0,True,2026,3,September,2026,3,September,38
+1143491338,2026-09-18,,Plumbing Sales,Moen Flo Estimate,Scheduled,Branded Phone Number,Local 619,92128,0,True,2026,3,September,2026,3,September,38
+1143492494,2026-09-18,,Plumbing Maintenance,Backflow Test,Scheduled,Website,Email Contact Form,92113,0,True,2026,3,September,2026,3,September,38
+1143497604,2026-09-18,,Lining Install - CA,Lining Estimate,Scheduled,Website,Email Contact Form,92101,0,True,2026,3,September,2026,3,September,38
+1143567859,2026-09-18,,HVAC Sales,HVAC Estimate,Scheduled,Branded Phone Number,A1-800-BILL HOWE,91914,0,True,2026,3,September,2026,3,September,38
+1143588358,2026-09-18,,Plumbing Service,Mainline Stop,Hold,Branded Phone Number,Local 619,92103,175,True,2026,3,September,2026,3,September,38
+1143590346,2026-09-18,2026-09-19,Plumbing Service,Upper/Lower Leak,Completed,Branded Phone Number,Local 619,92124,0,True,2026,3,September,2026,3,September,38
+1143599615,2026-09-18,2026-09-19,Plumbing Service,Slab Leak,Completed,PPC,Google | PMAX | Plumbing,92130,0,False,2026,3,September,2026,3,September,38
+31624202,2026-09-18,2026-09-18,Plumbing Service,Laundry Bibbs,Completed,Email,Legacy Email Marketing Multiple Offers,92101,0,True,2026,3,September,2026,3,September,38
+31657586,2026-09-18,,HVAC Service,Diagnosis,Scheduled,PPC,Google | Search | Competitor,92026,0,True,2026,3,September,2026,3,September,38
+31665287,2026-09-18,2026-09-18,Plumbing Service,Kitchen Stop,Completed,Branded Phone Number,A1-800-BILL HOWE,92117,102,True,2026,3,September,2026,3,September,38
+31678696,2026-09-18,,Plumbing Service,Lavatory Faucet,Scheduled,Google LSA,Google Local Services,92075,0,True,2026,3,September,2026,3,September,38
+31729147,2026-09-18,,HVAC Sales,HVAC Estimate,Scheduled,Google LSA,Google Local Services,92123,0,True,2026,3,September,2026,3,September,38
+320375279,2026-09-18,2026-09-18,Plumbing Service,Toilet Stop,Completed,PPC,Bing | Search | Brand,92008,348,True,2026,3,September,2026,3,September,38
+59369685,2026-09-18,2026-09-18,Plumbing Service,Tub/Shower Faucet,Completed,Google LSA,Google Local Services,92120,0,False,2026,3,September,2026,3,September,38
+1143606847,2026-09-19,2026-09-19,Plumbing Service,Slab Leak,Completed,Yelp,Yelp,92115,250,True,2026,3,September,2026,3,September,38
+1143607274,2026-09-19,2026-09-19,Plumbing Service,Pipe Leak,Completed,Google LSA,Google Local Services,92114,0,False,2026,3,September,2026,3,September,38
+1143607711,2026-09-19,2026-09-19,Plumbing Service,Angle Stop,Completed,PPC,Google | PMAX | Plumbing,92117,759,True,2026,3,September,2026,3,September,38
+1143607996,2026-09-19,,Plumbing Service,Pipe Leak,Scheduled,Branded Phone Number,Local 619,92029,0,True,2026,3,September,2026,3,September,38
+1143608799,2026-09-19,,Plumbing Service,Kitchen Faucet,Scheduled,Organic Search,Google Organic,92114,0,True,2026,3,September,2026,3,September,38
+1143608928,2026-09-19,,Plumbing Service,Toilet Stop,Scheduled,PPC,Google | PMAX | HVAC,92101,0,True,2026,3,September,2026,3,September,38
+1143609427,2026-09-19,2026-09-19,Plumbing Service,Kitchen Faucet,Canceled,Branded Phone Number,Local 619,92126,0,True,2026,3,September,2026,3,September,38
+1143637772,2026-09-19,,Plumbing Service,Water Heater Repair - Residential,Scheduled,Google LSA,Google Local Services,92128,0,True,2026,3,September,2026,3,September,38
+1143637831,2026-09-19,2026-09-19,Plumbing Service,Hose Bib,Canceled,Branded Phone Number,A1-800-BILL HOWE,92029,0,True,2026,3,September,2026,3,September,38
+1143639131,2026-09-19,,Plumbing Sales,Water Heater Estimate - Residential,Scheduled,Google LSA,Google Local Services,92154,0,True,2026,3,September,2026,3,September,38
+1143641700,2026-09-19,2026-09-19,Plumbing Service,Pipe Leak,Canceled,Yelp,Yelp,92111,0,True,2026,3,September,2026,3,September,38
+1143641717,2026-09-19,,Plumbing Service,Pipe Leak,Scheduled,PPC,Google | PMAX | Drains,92120,0,True,2026,3,September,2026,3,September,38
+1143641800,2026-09-19,,Plumbing Service,Laundry Bibbs,Scheduled,Google LSA,Google Local Services,92011,0,True,2026,3,September,2026,3,September,38
+1143642729,2026-09-19,2026-09-19,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Brand,92024,0,False,2026,3,September,2026,3,September,38
+1143647643,2026-09-19,2026-09-19,Plumbing Service,Gas Leak,Canceled,Google Business Profiles,GMB_SanDiego,92037,0,True,2026,3,September,2026,3,September,38
+151852,2026-09-19,2026-09-19,Plumbing Service,Mainline Stop,Completed,Website,Website Phone Calls,92024,500,True,2026,3,September,2026,3,September,38
+255920370,2026-09-19,,HVAC Service,Diagnosis,Scheduled,Branded Phone Number,Local 619,92131,0,True,2026,3,September,2026,3,September,38
+307666868,2026-09-19,,Plumbing Service,Water Heater Estimate - Residential,Scheduled,Google LSA,Google Local Services,92129,0,True,2026,3,September,2026,3,September,38
+31537426,2026-09-19,,Plumbing Service,Water Heater Repair - Residential,Scheduled,Branded Phone Number,A1-800-BILL HOWE,92114,0,True,2026,3,September,2026,3,September,38
+31680736,2026-09-19,,Plumbing Service,Tub/Shower Faucet,Scheduled,PPC,Google | PMAX | Plumbing,92037,0,True,2026,3,September,2026,3,September,38
+48586404,2026-09-19,,HVAC Service,Diagnosis,Scheduled,CSR Outbound,$1 OUTBOUND (use this for out-bounding),92117,0,True,2026,3,September,2026,3,September,38
+677819405,2026-09-19,2026-09-19,Plumbing Service,Lavatory Stop,Completed,PPC,Google | Search | Plumbing,92130,394,True,2026,3,September,2026,3,September,38
+97188067,2026-09-19,,Plumbing Service,Toilet Stop,Hold,Google Business Profiles,GMB_SanDiego,92024,0,True,2026,3,September,2026,3,September,38
+1143608336,2026-09-20,,HVAC Service,Diagnosis,Scheduled,Organic Search,Google Organic,92084,0,True,2026,3,September,2026,3,September,38
+1143609056,2026-09-20,,Plumbing Service,Combo,Scheduled,PPC,Google | PMAX | Drains,91978,0,True,2026,3,September,2026,3,September,38
+1143649812,2026-09-20,,Plumbing Service,Reset Toilet,Scheduled,PPC,Google | Search | Brand,92101,0,True,2026,3,September,2026,3,September,38
+1143665564,2026-09-20,2026-09-20,Plumbing Service,Pipe Leak,Completed,PPC,Google | Search | Plumbing,92128,513,True,2026,3,September,2026,3,September,38
+1143665981,2026-09-20,,Plumbing Service,Lavatory Stop,Scheduled,PPC,Google | PMAX | Plumbing,92127,0,True,2026,3,September,2026,3,September,38
+1143667332,2026-09-20,,Plumbing Service,Tankless Service,In Progress,PPC,Google | Search | Plumbing,92064,7143,True,2026,3,September,2026,3,September,38
+1143671217,2026-09-20,,HVAC Sales,HVAC Estimate,Scheduled,Organic Search,Bing Organic,91941,0,True,2026,3,September,2026,3,September,38
+1143673475,2026-09-20,2026-09-20,Plumbing Service,Toilet Stop,Completed,Direct Web Traffic,Direct Web Traffic,92131,352,True,2026,3,September,2026,3,September,38
+1143674768,2026-09-20,,Plumbing Service,Leak Below Kitchen,Scheduled,Organic Search,Google Organic,92124,0,True,2026,3,September,2026,3,September,38
+1143675872,2026-09-20,,HVAC Maintenance,Preventative Maintenance,Scheduled,Outbound SMS,ST Outbound Text Lines,92056,0,True,2026,3,September,2026,3,September,38
+1143682927,2026-09-20,,HVAC Sales,HVAC Estimate,Scheduled,Direct Web Traffic,Direct Web Traffic,92118,0,True,2026,3,September,2026,3,September,38
+1143684190,2026-09-20,,Plumbing Sales,Repipe/Reroute Estimate,Scheduled,PPC,Google | Search | Brand,92119,0,True,2026,3,September,2026,3,September,38
+1143686238,2026-09-20,,Plumbing Service,Sewer Smell,Scheduled,Organic Search,Google Organic,92026,0,True,2026,3,September,2026,3,September,38
+31566015,2026-09-20,2026-09-20,Plumbing Service,Plumbing Service,Completed,Google LSA,Google Local Services,92109,394,True,2026,3,September,2026,3,September,38
+31691922,2026-09-20,,Plumbing Service,Kitchen Stop,Scheduled,PPC,Google | Search | Plumbing,92117,0,True,2026,3,September,2026,3,September,38
+52701006,2026-09-20,,Plumbing Service,Water Heater Repair - Residential,Scheduled,Branded Phone Number,A1-800-BILL HOWE,92127,0,True,2026,3,September,2026,3,September,38
+52989770,2026-09-20,,Plumbing Service,Toilet Stop,Scheduled,PPC,Google | Search | Plumbing,92128,0,True,2026,3,September,2026,3,September,38
+65664770,2026-09-20,2026-09-20,Plumbing Service,Water Heater Repair - Residential,Completed,Google LSA,Google Local Services,92067,250,True,2026,3,September,2026,3,September,38

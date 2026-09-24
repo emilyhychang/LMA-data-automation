@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import re
 from dataclasses import dataclass
@@ -20,6 +21,21 @@ class ImportResult:
     period_start: date
     period_end: date
     output_dir: Path
+
+@dataclass(frozen=True)
+class UploadedImportResult:
+    """Results and download-ready CSV files for one private browser session."""
+
+    cleaned_rows: int
+    appended_rows: int
+    skipped_duplicate_rows: int
+    new_customers: int
+    period_start: date
+    period_end: date
+    cleaned_csv: bytes
+    master_csv: bytes
+    new_leads_csv: bytes
+    comparison_csv: bytes
 
 
 def load_settings(path: Path) -> dict[str, Any]:
@@ -205,6 +221,49 @@ def write_csv(
 
         writer.writeheader()
         writer.writerows(rows)
+
+
+def read_and_clean_csv_bytes(
+    contents: bytes,
+    settings: dict[str, Any],
+    dataset_name: str,
+    allow_empty: bool = False,
+) -> list[dict[str, str]]:
+    """Clean an uploaded CSV entirely in memory; nothing is written to disk."""
+
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{dataset_name} must be saved as a UTF-8 CSV.") from error
+
+    reader = csv.DictReader(io.StringIO(text))
+
+    if not reader.fieldnames:
+        raise ValueError(f"{dataset_name} has no header row.")
+
+    rows = []
+    for raw in reader:
+        row = standardise_row(raw, settings)
+        customer_id = clean_text(row.get("Customer ID", ""))
+        if not customer_id or not has_required_values(row, settings):
+            continue
+        row["Customer ID"] = customer_id
+        rows.append(row)
+
+    if not rows and not allow_empty:
+        raise ValueError(f"{dataset_name} has no valid job rows with all required values.")
+
+    return rows
+
+
+def csv_bytes(rows: list[dict[str, str]], columns: list[str]) -> bytes:
+    """Create a CSV download in memory, without creating a local file."""
+
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue().encode("utf-8")
 
 
 def fingerprint(row: dict[str, str], columns: list[str]) -> str:
@@ -408,7 +467,7 @@ def run_import(
     final_master_rows = master_rows + appended_rows
 
     # Persist only valid Customer ID rows in the one continuing master dataset.
-    # write_csv(master_path, final_master_rows, columns)
+    write_csv(master_path, final_master_rows, columns)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -480,3 +539,79 @@ def run_import(
         period_end=end,
         output_dir=output_dir,
     )
+
+def run_uploaded_import(
+    source_contents: bytes,
+    source_name: str,
+    master_contents: bytes,
+    new_leads_contents: bytes,
+    settings: dict[str, Any],
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> UploadedImportResult:
+    """Process three uploaded CSVs in memory for the private web app."""
+
+    columns = settings["master_columns"]
+    dedupe_columns = settings["dedupe_columns"]
+    cleaned_rows = read_and_clean_csv_bytes(source_contents, settings, "New ServiceTitan export")
+    master_rows = read_and_clean_csv_bytes(
+        master_contents, settings, "Master dataset", allow_empty=True
+    )
+    existing_new_leads = read_and_clean_csv_bytes(
+        new_leads_contents, settings, "New-leads-only dataset", allow_empty=True
+    )
+
+    inferred_start, inferred_end = infer_period(cleaned_rows, settings)
+    start = period_start or inferred_start
+    end = period_end or inferred_end
+    if end < start:
+        raise ValueError("Period end must be on or after period start.")
+
+    existing_records = {fingerprint(row, dedupe_columns) for row in master_rows}
+    known_customers = {row["Customer ID"] for row in master_rows if row["Customer ID"]}
+    existing_lead_records = {fingerprint(row, dedupe_columns) for row in existing_new_leads}
+
+    upload_customers: set[str] = set()
+    appended_rows = []
+    new_customer_rows = []
+
+    for row in sorted(cleaned_rows, key=lambda item: (item["Created Date"], item["Customer ID"])):
+        record_hash = fingerprint(row, dedupe_columns)
+        if record_hash in existing_records:
+            continue
+
+        customer_id = row["Customer ID"]
+        if customer_id not in known_customers and customer_id not in upload_customers:
+            new_customer_rows.append(row)
+
+        existing_records.add(record_hash)
+        known_customers.add(customer_id)
+        upload_customers.add(customer_id)
+        appended_rows.append(row)
+
+    new_lead_additions = [
+        row for row in new_customer_rows
+        if fingerprint(row, dedupe_columns) not in existing_lead_records
+    ]
+    final_master_rows = master_rows + appended_rows
+    final_new_leads_rows = existing_new_leads + new_lead_additions
+
+    comparison = compare_periods(final_master_rows, new_customer_rows, start, end, settings)
+    comparison_columns = [
+        "Period", "Start", "End", "Records", "Unique Customers",
+        "New Customers", "Revenue",
+    ]
+
+    return UploadedImportResult(
+        cleaned_rows=len(cleaned_rows),
+        appended_rows=len(appended_rows),
+        skipped_duplicate_rows=len(cleaned_rows) - len(appended_rows),
+        new_customers=len(new_customer_rows),
+        period_start=start,
+        period_end=end,
+        cleaned_csv=csv_bytes(cleaned_rows, columns),
+        master_csv=csv_bytes(final_master_rows, columns),
+        new_leads_csv=csv_bytes(final_new_leads_rows, columns),
+        comparison_csv=csv_bytes(comparison, comparison_columns),
+    )
+

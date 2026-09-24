@@ -29,14 +29,14 @@ class PipelineTest(unittest.TestCase):
                 settings["master_columns"],
             )
             second = run_import(fixtures / "period_2.csv", temp_path / "master.csv", settings, temp_path / "out2")
-            self.assertEqual((second.appended_rows, second.new_customers), (3, 2))
+            self.assertEqual((second.appended_rows, second.new_customers), (3, 1))
             repeat = run_import(fixtures / "period_2.csv", temp_path / "master.csv", settings, temp_path / "out3")
-            self.assertEqual((repeat.appended_rows, repeat.new_customers), (3, 2))
+            self.assertEqual((repeat.appended_rows, repeat.new_customers), (0, 0))
             repeat_first = run_import(fixtures / "period_1.csv", temp_path / "master.csv", settings, temp_path / "out4")
-            self.assertEqual((repeat_first.appended_rows, repeat_first.new_customers), (3, 2))
+            self.assertEqual((repeat_first.appended_rows, repeat_first.new_customers), (0, 0))
             with (temp_path / "out2/new_customers.csv").open() as handle:
                 rows = list(csv.DictReader(handle))
-            self.assertEqual([row["Customer ID"] for row in rows], ["1001", "1003"])
+            self.assertEqual([row["Customer ID"] for row in rows], ["1003"])
 
 
 if __name__ == "__main__":
