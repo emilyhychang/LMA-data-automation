@@ -338,6 +338,9 @@ def compare_periods(
     end: date,
     settings: dict[str, Any],
 ) -> list[dict[str, str | int]]:
+    # Retained for compatibility; comparison newness now comes from first-seen
+    # dates in the master rather than an import-specific new-leads subset.
+    _ = new_customer_rows
     period_days = (end - start).days
 
     previous_end = start - timedelta(days=1)
@@ -349,6 +352,17 @@ def compare_periods(
     except ValueError:
         last_year_start = start.replace(year=start.year - 1, day=28)
         last_year_end = end.replace(year=end.year - 1, day=28)
+
+    dated_customers = [
+        (row["Customer ID"], day)
+        for row in master_rows
+        if row.get("Customer ID")
+        and (day := parse_date(row.get("Created Date", ""), settings["date_formats"]))
+    ]
+    history_start = min((day for _, day in dated_customers), default=None)
+    first_seen: dict[str, date] = {}
+    for customer_id, day in dated_customers:
+        first_seen[customer_id] = min(day, first_seen.get(customer_id, day))
 
     comparisons = []
 
@@ -364,19 +378,20 @@ def compare_periods(
             settings,
         )
 
-        new_rows = rows_in_period(
-            new_customer_rows,
-            period_start,
-            period_end,
-            settings,
-        )
+        if history_start is None or history_start >= period_start:
+            new_customers: int | str = "Insufficient history"
+        else:
+            new_customers = sum(
+                period_start <= first_day <= period_end
+                for first_day in first_seen.values()
+            )
 
         comparisons.append({
             "Period": label,
             "Start": period_start.isoformat(),
             "End": period_end.isoformat(),
             **metric_summary(period_rows),
-            "New Customers": len(new_rows),
+            "New Customers": new_customers,
         })
 
     return comparisons
@@ -614,4 +629,3 @@ def run_uploaded_import(
         new_leads_csv=csv_bytes(final_new_leads_rows, columns),
         comparison_csv=csv_bytes(comparison, comparison_columns),
     )
-

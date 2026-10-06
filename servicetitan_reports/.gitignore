@@ -19,3 +19,6 @@ data-imports/master/*.xlsx
 
 # Local editor settings
 .vscode/
+
+# Local authentication and database credentials
+.streamlit/secrets.toml
