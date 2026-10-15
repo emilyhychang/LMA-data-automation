@@ -1,21 +1,40 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import json
 import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+
+MONTH_NAMES = (
+    "",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
 
 
 @dataclass(frozen=True)
 class ImportResult:
     cleaned_rows: int
     appended_rows: int
+    updated_rows: int
     skipped_duplicate_rows: int
     new_customers: int
     period_start: date
@@ -28,6 +47,7 @@ class UploadedImportResult:
 
     cleaned_rows: int
     appended_rows: int
+    updated_rows: int
     skipped_duplicate_rows: int
     new_customers: int
     period_start: date
@@ -36,7 +56,21 @@ class UploadedImportResult:
     master_csv: bytes
     new_leads_csv: bytes
     analysis_csv: bytes
+
+
+@dataclass(frozen=True)
+class ProcessedImport:
+    cleaned_rows: list[dict[str, str]]
+    master_rows: list[dict[str, str]]
+    new_customer_rows: list[dict[str, str]]
+    new_leads_rows: list[dict[str, str]]
     category_comparisons: dict[str, list[dict[str, str | int]]]
+    analysis_csv: bytes
+    appended_rows: int
+    updated_rows: int
+    skipped_rows: int
+    period_start: date
+    period_end: date
 
 
 def load_settings(path: Path) -> dict[str, Any]:
@@ -52,8 +86,15 @@ def normalise_header(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.strip().lower()).strip()
 
 
-def parse_date(value: str, formats: list[str]) -> date | None:
-    value = clean_text(value)
+@lru_cache(maxsize=65_536)
+def _parse_date_cached(value: str, formats: tuple[str, ...]) -> date | None:
+    if not value:
+        return None
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        pass
 
     for fmt in formats:
         try:
@@ -65,6 +106,10 @@ def parse_date(value: str, formats: list[str]) -> date | None:
         return datetime.fromisoformat(value).date()
     except ValueError:
         return None
+
+
+def parse_date(value: str, formats: list[str]) -> date | None:
+    return _parse_date_cached(clean_text(value), tuple(formats))
 
 
 def parse_amount(value: str) -> str:
@@ -87,19 +132,16 @@ def parse_amount(value: str) -> str:
 
 def add_calendar_fields(
     row: dict[str, str],
-    date_column: str,
     prefix: str,
-    settings: dict[str, Any],
+    day: date | None,
 ) -> None:
-    day = parse_date(row.get(date_column, ""), settings["date_formats"])
-
     if not day:
         return
 
     values = {
         f"{prefix} Year": str(day.year),
         f"{prefix} Qtr": str(((day.month - 1) // 3) + 1),
-        f"{prefix} Mo": day.strftime("%B"),
+        f"{prefix} Mo": MONTH_NAMES[day.month],
         f"{prefix} Wk": str(day.isocalendar().week),
     }
 
@@ -111,45 +153,35 @@ def add_calendar_fields(
 def standardise_row(
     raw: dict[str | None, str | None],
     settings: dict[str, Any],
+    header_destinations: dict[str, str],
 ) -> dict[str, str]:
     """Convert one raw ServiceTitan row into the master CSV layout."""
 
-    aliases = {
-        normalise_header(source): destination
-        for source, destination in settings["column_aliases"].items()
-    }
-
-    row = {
-        column: ""
-        for column in settings["master_columns"]
-    }
+    row = dict.fromkeys(settings["master_columns"], "")
 
     for header, value in raw.items():
         if not header:
             continue
 
-        destination = aliases.get(
-            normalise_header(header),
-            header.strip(),
-        )
-
-        if destination in row:
+        destination = header_destinations.get(header)
+        if destination:
             row[destination] = clean_text(value)
 
-    for column in ("Created Date", "Completion Date"):
-        parsed = parse_date(row[column], settings["date_formats"])
-
-        if parsed:
-            row[column] = parsed.isoformat()
+    created_day = parse_date(row["Created Date"], settings["date_formats"])
+    completion_day = parse_date(row["Completion Date"], settings["date_formats"])
+    if created_day:
+        row["Created Date"] = created_day.isoformat()
+    if completion_day:
+        row["Completion Date"] = completion_day.isoformat()
 
     row["Total"] = parse_amount(row["Total"])
 
     if row["Opportunity"].lower() in {"true", "false"}:
         row["Opportunity"] = row["Opportunity"].capitalize()
 
-    add_calendar_fields(row, "Created Date", "C", settings)
+    add_calendar_fields(row, "C", created_day)
     # The existing master defines B calendar fields from Created Date.
-    add_calendar_fields(row, "Created Date", "B", settings)
+    add_calendar_fields(row, "B", created_day)
 
     return row
 
@@ -161,6 +193,8 @@ def has_required_values(row: dict[str, str], settings: dict[str, Any]) -> bool:
 def read_and_clean_export(
     source: Path,
     settings: dict[str, Any],
+    dataset_name: str = "CSV",
+    allow_empty: bool = False,
 ) -> list[dict[str, str]]:
     """
     Read a ServiceTitan export and keep only valid job rows.
@@ -170,40 +204,13 @@ def read_and_clean_export(
     downstream analysis.
     """
 
-    with source.open(encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-
-        if not reader.fieldnames:
-            raise ValueError("The CSV has no header row.")
-
-        rows = []
-
-        for raw in reader:
-            row = standardise_row(raw, settings)
-
-            # Ignore rows without a Customer ID.
-            customer_id = clean_text(row.get("Customer ID", ""))
-
-            if not customer_id or not has_required_values(row, settings):
-                continue
-
-            row["Customer ID"] = customer_id
-            rows.append(row)
-
-    if not rows:
-        raise ValueError(
-            "No job rows with a Customer ID were found in the CSV."
-        )
-
-    return rows
-
-
-def read_csv(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
+    if allow_empty and not source.exists():
         return []
 
-    with path.open(encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle))
+    with source.open(encoding="utf-8-sig", newline="") as handle:
+        return clean_csv_reader(
+            csv.DictReader(handle), settings, dataset_name, allow_empty
+        )
 
 
 def write_csv(
@@ -214,14 +221,44 @@ def write_csv(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=columns,
-            extrasaction="ignore",
-        )
+        write_csv_rows(handle, rows, columns)
 
-        writer.writeheader()
-        writer.writerows(rows)
+
+def clean_csv_reader(
+    reader: csv.DictReader,
+    settings: dict[str, Any],
+    dataset_name: str,
+    allow_empty: bool = False,
+) -> list[dict[str, str]]:
+    if not reader.fieldnames:
+        raise ValueError(f"{dataset_name} has no header row.")
+
+    aliases = {
+        normalise_header(source): destination
+        for source, destination in settings["column_aliases"].items()
+    }
+    columns = set(settings["master_columns"])
+    header_destinations = {}
+    for header in reader.fieldnames:
+        if not header:
+            continue
+        destination = aliases.get(normalise_header(header), header.strip())
+        if destination in columns:
+            header_destinations[header] = destination
+
+    rows = []
+    for raw in reader:
+        row = standardise_row(raw, settings, header_destinations)
+        customer_id = clean_text(row.get("Customer ID", ""))
+        if customer_id and has_required_values(row, settings):
+            row["Customer ID"] = customer_id
+            rows.append(row)
+
+    if not rows and not allow_empty:
+        raise ValueError(
+            f"{dataset_name} has no valid job rows with all required values."
+        )
+    return rows
 
 
 def read_and_clean_csv_bytes(
@@ -237,33 +274,26 @@ def read_and_clean_csv_bytes(
     except UnicodeDecodeError as error:
         raise ValueError(f"{dataset_name} must be saved as a UTF-8 CSV.") from error
 
-    reader = csv.DictReader(io.StringIO(text))
+    return clean_csv_reader(
+        csv.DictReader(io.StringIO(text)), settings, dataset_name, allow_empty
+    )
 
-    if not reader.fieldnames:
-        raise ValueError(f"{dataset_name} has no header row.")
 
-    rows = []
-    for raw in reader:
-        row = standardise_row(raw, settings)
-        customer_id = clean_text(row.get("Customer ID", ""))
-        if not customer_id or not has_required_values(row, settings):
-            continue
-        row["Customer ID"] = customer_id
-        rows.append(row)
-
-    if not rows and not allow_empty:
-        raise ValueError(f"{dataset_name} has no valid job rows with all required values.")
-
-    return rows
+def write_csv_rows(
+    handle: Any,
+    rows: list[dict[str, str]],
+    columns: list[str],
+) -> None:
+    writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
 
 
 def csv_bytes(rows: list[dict[str, str]], columns: list[str]) -> bytes:
     """Create a CSV download in memory, without creating a local file."""
 
     buffer = io.StringIO(newline="")
-    writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(rows)
+    write_csv_rows(buffer, rows, columns)
     return buffer.getvalue().encode("utf-8")
 
 
@@ -307,29 +337,6 @@ def analysis_csv_bytes(
     return buffer.getvalue().encode("utf-8")
 
 
-def write_analysis_csv(
-    path: Path,
-    category_comparisons: dict[str, list[dict[str, str | int]]],
-    job_status_rows: list[dict[str, str | int]],
-    job_status_columns: list[str],
-) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(analysis_csv_bytes(
-        category_comparisons,
-        job_status_rows,
-        job_status_columns,
-    ))
-
-
-def fingerprint(row: dict[str, str], columns: list[str]) -> str:
-    values = "\x1f".join(
-        f"{column}={row.get(column, '')}"
-        for column in columns
-    )
-
-    return hashlib.sha256(values.encode("utf-8")).hexdigest()
-
-
 def infer_period(
     rows: list[dict[str, str]],
     settings: dict[str, Any],
@@ -347,21 +354,45 @@ def infer_period(
     return min(valid_dates), max(valid_dates)
 
 
-def rows_in_period(
-    rows: list[dict[str, str]],
+def comparison_periods(
     start: date,
     end: date,
+) -> list[tuple[str, date, date]]:
+    """Return the current, immediately previous, and prior-year periods."""
+
+    period_days = (end - start).days
+    previous_end = start - timedelta(days=1)
+    previous_start = previous_end - timedelta(days=period_days)
+    try:
+        last_year_start = start.replace(year=start.year - 1)
+        last_year_end = end.replace(year=end.year - 1)
+    except ValueError:
+        last_year_start = start.replace(year=start.year - 1, day=28)
+        last_year_end = end.replace(year=end.year - 1, day=28)
+    return [
+        ("Current Period", start, end),
+        ("Previous Period", previous_start, previous_end),
+        ("Same Period Last Year", last_year_start, last_year_end),
+    ]
+
+
+def stable_row_preference(
+    row: dict[str, str],
     settings: dict[str, Any],
-) -> list[dict[str, str]]:
-    matching_rows = []
+    category_map: dict[str, str] | None = None,
+) -> tuple[int, int, tuple[str, ...]]:
+    """Rank same-day lead rows without depending on their CSV order."""
 
-    for row in rows:
-        day = parse_date(row["Created Date"], settings["date_formats"])
-
-        if day and start <= day <= end:
-            matching_rows.append(row)
-
-    return matching_rows
+    category = invoice_category(row, settings, category_map)
+    category_rank = {"HVAC": 0, "Plumbing": 1}.get(category, 2)
+    return (
+        0 if clean_text(row.get("Opportunity", "")) else 1,
+        category_rank,
+        tuple(
+            clean_text(row.get(column, "")).casefold()
+            for column in settings["master_columns"]
+        ),
+    )
 
 
 def first_seen_customer_rows(
@@ -370,15 +401,22 @@ def first_seen_customer_rows(
 ) -> list[dict[str, str]]:
     """Return one earliest-dated row per customer from the complete master."""
 
-    selected: dict[str, tuple[date, int, dict[str, str]]] = {}
-    for position, row in enumerate(rows):
+    selected: dict[
+        str,
+        tuple[date, tuple[int, int, tuple[str, ...]], dict[str, str]],
+    ] = {}
+    category_map = invoice_category_mapping(settings)
+    for row in rows:
         customer_id = clean_text(row.get("Customer ID", ""))
         day = parse_date(row.get("Created Date", ""), settings["date_formats"])
         if not customer_id or day is None:
             continue
         current = selected.get(customer_id)
-        if current is None or (day, position) < (current[0], current[1]):
-            selected[customer_id] = (day, position, row)
+        if current is not None and day > current[0]:
+            continue
+        preference = stable_row_preference(row, settings, category_map)
+        if current is None or (day, preference) < (current[0], current[1]):
+            selected[customer_id] = (day, preference, row)
 
     return [
         row
@@ -387,6 +425,74 @@ def first_seen_customer_rows(
             key=lambda item: (item[0], item[2].get("Customer ID", ""), item[1]),
         )
     ]
+
+
+def row_identity(
+    row: dict[str, str],
+    settings: dict[str, Any],
+) -> tuple[str, ...]:
+    return tuple(
+        clean_text(row.get(column, ""))
+        for column in settings["job_identity_columns"]
+    )
+
+
+def row_snapshot(
+    row: dict[str, str],
+    settings: dict[str, Any],
+) -> tuple[str, ...]:
+    return tuple(
+        clean_text(row.get(column, ""))
+        for column in settings["master_columns"]
+    )
+
+
+def merge_master_rows(
+    master_rows: list[dict[str, str]],
+    incoming_rows: list[dict[str, str]],
+    settings: dict[str, Any],
+) -> tuple[list[dict[str, str]], list[dict[str, str]], int, int]:
+    """Replace uploaded job-group snapshots and report added/updated/skipped rows."""
+
+    incoming_groups: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
+    for row in incoming_rows:
+        incoming_groups[row_identity(row, settings)].append(row)
+
+    incoming_keys = set(incoming_groups)
+    existing_groups: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
+    merged_rows = []
+    known_customers = set()
+    for row in master_rows:
+        customer_id = row.get("Customer ID")
+        if customer_id:
+            known_customers.add(customer_id)
+        identity = row_identity(row, settings)
+        if identity in incoming_keys:
+            existing_groups[identity].append(row)
+        else:
+            merged_rows.append(row)
+    appended_rows = 0
+    updated_rows = 0
+    skipped_rows = 0
+    for identity, replacement_rows in incoming_groups.items():
+        existing_rows = existing_groups.get(identity)
+        if not existing_rows:
+            appended_rows += len(replacement_rows)
+        elif Counter(
+            row_snapshot(row, settings) for row in existing_rows
+        ) == Counter(
+            row_snapshot(row, settings) for row in replacement_rows
+        ):
+            skipped_rows += len(replacement_rows)
+        else:
+            updated_rows += len(replacement_rows)
+        merged_rows.extend(replacement_rows)
+
+    new_customer_rows = [
+        row for row in first_seen_customer_rows(incoming_rows, settings)
+        if row["Customer ID"] not in known_customers
+    ]
+    return merged_rows, new_customer_rows, updated_rows, skipped_rows
 
 
 def metric_summary(
@@ -411,91 +517,25 @@ def metric_summary(
     }
 
 
-def invoice_category(
-    row: dict[str, str],
-    settings: dict[str, Any],
-) -> str:
-    """Map an Invoice Business Unit to its reporting category."""
-
-    mappings = {
+def invoice_category_mapping(settings: dict[str, Any]) -> dict[str, str]:
+    return {
         clean_text(invoice_type).casefold(): category
         for invoice_type, category in settings.get(
             "invoice_type_categories", {}
         ).items()
     }
+
+
+def invoice_category(
+    row: dict[str, str],
+    settings: dict[str, Any],
+    category_map: dict[str, str] | None = None,
+) -> str:
+    """Map an Invoice Business Unit to its reporting category."""
+
+    mappings = category_map or invoice_category_mapping(settings)
     invoice_type = clean_text(row.get("Invoice Business Unit", "")).casefold()
     return mappings.get(invoice_type, "")
-
-
-def compare_periods(
-    master_rows: list[dict[str, str]],
-    new_customer_rows: list[dict[str, str]],
-    start: date,
-    end: date,
-    settings: dict[str, Any],
-    customer_history_rows: list[dict[str, str]] | None = None,
-) -> list[dict[str, str | int]]:
-    # Retained for compatibility; comparison newness now comes from first-seen
-    # dates in the master rather than an import-specific new-leads subset.
-    _ = new_customer_rows
-    period_days = (end - start).days
-
-    previous_end = start - timedelta(days=1)
-    previous_start = previous_end - timedelta(days=period_days)
-
-    try:
-        last_year_start = start.replace(year=start.year - 1)
-        last_year_end = end.replace(year=end.year - 1)
-    except ValueError:
-        last_year_start = start.replace(year=start.year - 1, day=28)
-        last_year_end = end.replace(year=end.year - 1, day=28)
-
-    dated_customers = [
-        (row["Customer ID"], day)
-        for row in customer_history_rows or master_rows
-        if row.get("Customer ID")
-        and (day := parse_date(row.get("Created Date", ""), settings["date_formats"]))
-    ]
-    history_start = min((day for _, day in dated_customers), default=None)
-    first_seen: dict[str, date] = {}
-    for customer_id, day in dated_customers:
-        first_seen[customer_id] = min(day, first_seen.get(customer_id, day))
-
-    comparisons = []
-
-    for label, period_start, period_end in [
-        ("Current Period", start, end),
-        ("Previous Period", previous_start, previous_end),
-        ("Same Period Last Year", last_year_start, last_year_end),
-    ]:
-        period_rows = rows_in_period(
-            master_rows,
-            period_start,
-            period_end,
-            settings,
-        )
-
-        if history_start is None or history_start >= period_start:
-            new_customers: int | str = "Insufficient history"
-        else:
-            period_customer_ids = {
-                row["Customer ID"] for row in period_rows if row.get("Customer ID")
-            }
-            new_customers = sum(
-                customer_id in period_customer_ids
-                and period_start <= first_day <= period_end
-                for customer_id, first_day in first_seen.items()
-            )
-
-        comparisons.append({
-            "Period": label,
-            "Start": period_start.isoformat(),
-            "End": period_end.isoformat(),
-            **metric_summary(period_rows),
-            "New Customers": new_customers,
-        })
-
-    return comparisons
 
 
 def category_period_comparisons(
@@ -503,80 +543,82 @@ def category_period_comparisons(
     start: date,
     end: date,
     settings: dict[str, Any],
+    first_seen_rows: list[dict[str, str]] | None = None,
 ) -> dict[str, list[dict[str, str | int]]]:
-    """Build separate period comparisons for HVAC and Plumbing."""
+    """Build internally consistent, mutually exclusive category comparisons."""
 
-    comparisons = {}
-    for category in ("HVAC", "Plumbing"):
-        category_rows = [
-            row
-            for row in master_rows
-            if invoice_category(row, settings).casefold() == category.casefold()
-        ]
-        comparisons[category] = compare_periods(
-            category_rows, [], start, end, settings, customer_history_rows=master_rows
-        )
-
-    period_days = (end - start).days
-    previous_end = start - timedelta(days=1)
-    previous_start = previous_end - timedelta(days=period_days)
-    try:
-        last_year_start = start.replace(year=start.year - 1)
-        last_year_end = end.replace(year=end.year - 1)
-    except ValueError:
-        last_year_start = start.replace(year=start.year - 1, day=28)
-        last_year_end = end.replace(year=end.year - 1, day=28)
-
-    periods = [
-        ("Current Period", start, end),
-        ("Previous Period", previous_start, previous_end),
-        ("Same Period Last Year", last_year_start, last_year_end),
-    ]
-    exclusive_counts: dict[str, dict[str, int]] = {}
-    exclusive_new_counts: dict[str, dict[str, int]] = {}
+    categories = ("HVAC", "Plumbing")
+    comparisons: dict[str, list[dict[str, str | int]]] = {
+        category: [] for category in categories
+    }
+    if first_seen_rows is None:
+        first_seen_rows = first_seen_customer_rows(master_rows, settings)
     first_seen: dict[str, date] = {}
-    for row in master_rows:
+    for row in first_seen_rows:
         customer_id = clean_text(row.get("Customer ID", ""))
         day = parse_date(row.get("Created Date", ""), settings["date_formats"])
         if customer_id and day is not None:
-            first_seen[customer_id] = min(day, first_seen.get(customer_id, day))
-    for label, period_start, period_end in periods:
-        customer_categories: dict[str, tuple[date, str]] = {}
-        for row in rows_in_period(master_rows, period_start, period_end, settings):
+            first_seen[customer_id] = day
+    history_start = min(first_seen.values(), default=None)
+
+    periods = comparison_periods(start, end)
+    rows_by_period: list[list[dict[str, str]]] = [[] for _ in periods]
+    for row in master_rows:
+        day = parse_date(row.get("Created Date", ""), settings["date_formats"])
+        if day is None:
+            continue
+        for index, (_, period_start, period_end) in enumerate(periods):
+            if period_start <= day <= period_end:
+                rows_by_period[index].append(row)
+                break
+
+    category_map = invoice_category_mapping(settings)
+    for (label, period_start, period_end), period_rows in zip(
+        periods, rows_by_period
+    ):
+        customer_categories: dict[
+            str,
+            tuple[date, tuple[int, int, tuple[str, ...]], str],
+        ] = {}
+        for row in period_rows:
             customer_id = clean_text(row.get("Customer ID", ""))
-            category = invoice_category(row, settings)
+            category = invoice_category(row, settings, category_map)
             day = parse_date(row.get("Created Date", ""), settings["date_formats"])
-            if not customer_id or not category or day is None:
+            if not customer_id or category not in categories or day is None:
                 continue
+            preference = stable_row_preference(row, settings, category_map)
             current = customer_categories.get(customer_id)
-            if current is None or day < current[0]:
-                customer_categories[customer_id] = (day, category)
-        exclusive_counts[label] = {
-            category: sum(
-                assigned_category == category
-                for _, assigned_category in customer_categories.values()
-            )
-            for category in ("HVAC", "Plumbing")
-        }
-        exclusive_new_counts[label] = {
-            category: sum(
-                assigned_category == category
-                and period_start <= first_seen[customer_id] <= period_end
-                for customer_id, (_, assigned_category) in customer_categories.items()
-            )
-            for category in ("HVAC", "Plumbing")
-        }
+            candidate = (day, preference, category)
+            if current is None or candidate < current:
+                customer_categories[customer_id] = candidate
 
-    for category, category_comparisons in comparisons.items():
-        for comparison in category_comparisons:
-            comparison["Unique Customers"] = exclusive_counts[
-                str(comparison["Period"])
-            ][category]
-            if comparison["New Customers"] != "Insufficient history":
-                comparison["New Customers"] = exclusive_new_counts[
-                    str(comparison["Period"])
-                ][category]
+        for category in categories:
+            assigned_customers = {
+                customer_id
+                for customer_id, (_, _, assigned_category) in customer_categories.items()
+                if assigned_category == category
+            }
+            category_rows = [
+                row for row in period_rows
+                if row.get("Customer ID") in assigned_customers
+                and invoice_category(row, settings, category_map) == category
+            ]
+            if history_start is None or history_start >= period_start:
+                new_customers: int | str = "Insufficient history"
+            else:
+                new_customers = sum(
+                    period_start <= first_seen[customer_id] <= period_end
+                    for customer_id in assigned_customers
+                )
+            comparisons[category].append({
+                "Period": label,
+                "Start": period_start.isoformat(),
+                "End": period_end.isoformat(),
+                **metric_summary(category_rows),
+                "New Customers": new_customers,
+            })
 
+    for category_comparisons in comparisons.values():
         current_new_customers = category_comparisons[0]["New Customers"]
         category_comparisons[0]["New Customer Gain/Loss"] = "—"
         for comparison in category_comparisons[1:]:
@@ -650,6 +692,7 @@ def weekly_opportunity_ytd(
         current_year: {week: 0 for week in range(1, last_week + 1)},
         previous_year: {week: 0 for week in range(1, 53)},
     }
+    category_map = invoice_category_mapping(settings)
 
     for row, day in dated_rows:
         if day.year not in counts:
@@ -659,7 +702,7 @@ def weekly_opportunity_ytd(
             continue
         if week > 52:
             continue
-        if invoice_category(row, settings).casefold() != category.casefold():
+        if invoice_category(row, settings, category_map).casefold() != category.casefold():
             continue
         if not clean_text(row.get("Opportunity", "")):
             continue
@@ -682,6 +725,46 @@ def weekly_opportunity_ytd(
     return chart_rows, (previous_year, current_year)
 
 
+def process_import_rows(
+    cleaned_rows: list[dict[str, str]],
+    master_rows: list[dict[str, str]],
+    settings: dict[str, Any],
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> ProcessedImport:
+    """Apply one import consistently for both file and web entry points."""
+
+    inferred_start, inferred_end = infer_period(cleaned_rows, settings)
+    start = period_start or inferred_start
+    end = period_end or inferred_end
+    if end < start:
+        raise ValueError("Period end must be on or after period start.")
+
+    final_master, new_customers, updated, skipped = merge_master_rows(
+        master_rows, cleaned_rows, settings
+    )
+    new_leads_rows = first_seen_customer_rows(final_master, settings)
+    category_comparisons = category_period_comparisons(
+        final_master, start, end, settings, new_leads_rows
+    )
+    analysis_rows, analysis_columns = job_status_analysis(cleaned_rows)
+    return ProcessedImport(
+        cleaned_rows=cleaned_rows,
+        master_rows=final_master,
+        new_customer_rows=new_customers,
+        new_leads_rows=new_leads_rows,
+        category_comparisons=category_comparisons,
+        analysis_csv=analysis_csv_bytes(
+            category_comparisons, analysis_rows, analysis_columns
+        ),
+        appended_rows=len(cleaned_rows) - updated - skipped,
+        updated_rows=updated,
+        skipped_rows=skipped,
+        period_start=start,
+        period_end=end,
+    )
+
+
 def run_import(
     source: Path,
     master_path: Path,
@@ -691,202 +774,86 @@ def run_import(
     period_end: date | None = None,
 ) -> ImportResult:
     columns = settings["master_columns"]
-    dedupe_columns = settings["dedupe_columns"]
-
     cleaned_rows = read_and_clean_export(source, settings)
-
-    inferred_start, inferred_end = infer_period(
-        cleaned_rows,
-        settings,
+    master_rows = read_and_clean_export(
+        master_path, settings, "Master dataset", allow_empty=True
     )
 
-    start = period_start or inferred_start
-    end = period_end or inferred_end
-
-    if end < start:
-        raise ValueError(
-            "period end must be on or after period start"
-        )
-
-    master_rows = []
-
-    for row in read_csv(master_path):
-        cleaned_row = {
-            column: clean_text(row.get(column, ""))
-            for column in columns
-        }
-
-        # Never allow blank/non-customer rows from the master
-        # into comparisons, duplicate detection, or reporting.
-        if not has_required_values(cleaned_row, settings):
-            continue
-
-        master_rows.append(cleaned_row)
-
-    existing_records = {
-        fingerprint(row, dedupe_columns)
-        for row in master_rows
-    }
-
-    known_customers = {
-        row["Customer ID"]
-        for row in master_rows
-        if row["Customer ID"]
-    }
-
-    upload_customers: set[str] = set()
-
-    appended_rows = []
-    new_customer_rows = []
-
-    for row in sorted(
-        cleaned_rows,
-        key=lambda item: (
-            item["Created Date"],
-            item["Customer ID"],
-        ),
-    ):
-        record_hash = fingerprint(row, dedupe_columns)
-
-        if record_hash in existing_records:
-            continue
-
-        customer_id = row["Customer ID"]
-
-        if (
-            customer_id not in known_customers
-            and customer_id not in upload_customers
-        ):
-            new_customer_rows.append(row)
-
-        existing_records.add(record_hash)
-        known_customers.add(customer_id)
-        upload_customers.add(customer_id)
-        appended_rows.append(row)
-
-    final_master_rows = master_rows + appended_rows
+    processed = process_import_rows(
+        cleaned_rows, master_rows, settings, period_start, period_end
+    )
 
     # Persist only valid Customer ID rows in the one continuing master dataset.
-    write_csv(master_path, final_master_rows, columns)
+    write_csv(master_path, processed.master_rows, columns)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cleaned_file = output_dir / f"{source.stem}_cleaned.csv"
 
-    write_csv(cleaned_file, cleaned_rows, columns)
-    write_csv(output_dir / "new_customers.csv", new_customer_rows, columns)
+    write_csv(cleaned_file, processed.cleaned_rows, columns)
+    write_csv(output_dir / "new_customers.csv", processed.new_customer_rows, columns)
 
     new_leads_path = master_path.parent / settings["new_leads_filename"]
 
     write_csv(
         new_leads_path,
-        first_seen_customer_rows(final_master_rows, settings),
+        processed.new_leads_rows,
         columns,
     )
-    category_comparisons = category_period_comparisons(
-        final_master_rows, start, end, settings
-    )
-    analysis_rows, analysis_columns = job_status_analysis(cleaned_rows)
-
-    write_analysis_csv(
-        output_dir / "analysis.csv",
-        category_comparisons,
-        analysis_rows,
-        analysis_columns,
-    )
-
-    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "analysis.csv").write_bytes(processed.analysis_csv)
 
     (output_dir / "report_data.json").write_text(
         json.dumps({
             "period": {
-                "start": start.isoformat(),
-                "end": end.isoformat(),
+                "start": processed.period_start.isoformat(),
+                "end": processed.period_end.isoformat(),
             },
-            "category_comparisons": category_comparisons,
-            "new_customer_count": len(new_customer_rows),
+            "category_comparisons": processed.category_comparisons,
+            "new_customer_count": len(processed.new_customer_rows),
         }, indent=2),
         encoding="utf-8",
     )
 
     return ImportResult(
-        cleaned_rows=len(cleaned_rows),
-        appended_rows=len(appended_rows),
-        skipped_duplicate_rows=len(cleaned_rows) - len(appended_rows),
-        new_customers=len(new_customer_rows),
-        period_start=start,
-        period_end=end,
+        cleaned_rows=len(processed.cleaned_rows),
+        appended_rows=processed.appended_rows,
+        updated_rows=processed.updated_rows,
+        skipped_duplicate_rows=processed.skipped_rows,
+        new_customers=len(processed.new_customer_rows),
+        period_start=processed.period_start,
+        period_end=processed.period_end,
         output_dir=output_dir,
     )
 
+
 def run_uploaded_import(
     source_contents: bytes,
-    source_name: str,
     master_contents: bytes,
-    new_leads_contents: bytes,
     settings: dict[str, Any],
     period_start: date | None = None,
     period_end: date | None = None,
 ) -> UploadedImportResult:
-    """Process three uploaded CSVs in memory for the private web app."""
+    """Process an uploaded report against the stored master in memory."""
 
-    # Kept in the public interface for compatibility with stored datasets.
-    # The output is rebuilt from the complete master to repair historical gaps.
-    _ = new_leads_contents
     columns = settings["master_columns"]
-    dedupe_columns = settings["dedupe_columns"]
     cleaned_rows = read_and_clean_csv_bytes(source_contents, settings, "New ServiceTitan export")
     master_rows = read_and_clean_csv_bytes(
         master_contents, settings, "Master dataset", allow_empty=True
     )
-    inferred_start, inferred_end = infer_period(cleaned_rows, settings)
-    start = period_start or inferred_start
-    end = period_end or inferred_end
-    if end < start:
-        raise ValueError("Period end must be on or after period start.")
-
-    existing_records = {fingerprint(row, dedupe_columns) for row in master_rows}
-    known_customers = {row["Customer ID"] for row in master_rows if row["Customer ID"]}
-    upload_customers: set[str] = set()
-    appended_rows = []
-    new_customer_rows = []
-
-    for row in sorted(cleaned_rows, key=lambda item: (item["Created Date"], item["Customer ID"])):
-        record_hash = fingerprint(row, dedupe_columns)
-        if record_hash in existing_records:
-            continue
-
-        customer_id = row["Customer ID"]
-        if customer_id not in known_customers and customer_id not in upload_customers:
-            new_customer_rows.append(row)
-
-        existing_records.add(record_hash)
-        known_customers.add(customer_id)
-        upload_customers.add(customer_id)
-        appended_rows.append(row)
-
-    final_master_rows = master_rows + appended_rows
-    final_new_leads_rows = first_seen_customer_rows(final_master_rows, settings)
-
-    category_comparisons = category_period_comparisons(
-        final_master_rows, start, end, settings
+    processed = process_import_rows(
+        cleaned_rows, master_rows, settings, period_start, period_end
     )
-    analysis_rows, analysis_columns = job_status_analysis(cleaned_rows)
 
     return UploadedImportResult(
-        cleaned_rows=len(cleaned_rows),
-        appended_rows=len(appended_rows),
-        skipped_duplicate_rows=len(cleaned_rows) - len(appended_rows),
-        new_customers=len(new_customer_rows),
-        period_start=start,
-        period_end=end,
-        cleaned_csv=csv_bytes(cleaned_rows, columns),
-        master_csv=csv_bytes(final_master_rows, columns),
-        new_leads_csv=csv_bytes(final_new_leads_rows, columns),
-        analysis_csv=analysis_csv_bytes(
-            category_comparisons,
-            analysis_rows,
-            analysis_columns,
-        ),
-        category_comparisons=category_comparisons,
+        cleaned_rows=len(processed.cleaned_rows),
+        appended_rows=processed.appended_rows,
+        updated_rows=processed.updated_rows,
+        skipped_duplicate_rows=processed.skipped_rows,
+        new_customers=len(processed.new_customer_rows),
+        period_start=processed.period_start,
+        period_end=processed.period_end,
+        cleaned_csv=csv_bytes(processed.cleaned_rows, columns),
+        master_csv=csv_bytes(processed.master_rows, columns),
+        new_leads_csv=csv_bytes(processed.new_leads_rows, columns),
+        analysis_csv=processed.analysis_csv,
     )

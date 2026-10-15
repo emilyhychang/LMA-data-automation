@@ -40,7 +40,7 @@ class StorageTest(unittest.TestCase):
 
         self.assertEqual(len(rows(clean_master)), 1)
         self.assertEqual(len(rows(clean_leads)), 1)
-        self.assertEqual(rows(clean_leads)[0]["Created Date"], "2026-09-02")
+        self.assertEqual(rows(clean_leads)[0]["Created Date"], "2026-09-01")
 
     def test_schema_is_created_outside_the_public_api_schema(self):
         statements = []
@@ -70,7 +70,7 @@ class StorageTest(unittest.TestCase):
         )
         store.ensure_schema()
 
-        self.assertEqual(len(statements), 5)
+        self.assertEqual(len(statements), 6)
         self.assertTrue(all("lma_private" in statement for statement in statements))
 
 

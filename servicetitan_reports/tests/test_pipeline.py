@@ -11,18 +11,84 @@ sys.path.insert(0, str(PROJECT / "src"))
 from servicetitan_reports.pipeline import (
     analysis_csv_bytes,
     category_period_comparisons,
-    compare_periods,
     csv_bytes,
     first_seen_customer_rows,
     job_status_analysis,
     load_settings,
     run_import,
+    run_uploaded_import,
     weekly_opportunity_ytd,
 )
 
 
 class PipelineTest(unittest.TestCase):
-    
+
+    def test_local_and_uploaded_imports_share_the_same_results(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        settings["required_columns"] = ["Customer ID", "Created Date"]
+        master_rows = [{
+            "Customer ID": "existing",
+            "Created Date": "09/01/2026",
+            "Invoice Business Unit": "HVAC Service",
+            "Job Type": "Repair",
+            "Job Status": "Scheduled",
+            "Total": "100",
+        }]
+        source_rows = [
+            {
+                **master_rows[0],
+                "Job Status": "Completed",
+                "Total": "250",
+            },
+            {
+                "Customer ID": "new",
+                "Created Date": "09/02/2026",
+                "Invoice Business Unit": "Plumbing",
+                "Job Type": "Drain",
+                "Job Status": "Scheduled",
+                "Total": "300",
+            },
+        ]
+        master_contents = csv_bytes(master_rows, settings["master_columns"])
+        source_contents = csv_bytes(source_rows, settings["master_columns"])
+
+        uploaded = run_uploaded_import(source_contents, master_contents, settings)
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            master_path = temp_path / "master.csv"
+            source_path = temp_path / "source.csv"
+            master_path.write_bytes(master_contents)
+            source_path.write_bytes(source_contents)
+            local = run_import(
+                source_path, master_path, settings, temp_path / "output"
+            )
+
+            self.assertEqual(
+                (
+                    local.cleaned_rows,
+                    local.appended_rows,
+                    local.updated_rows,
+                    local.skipped_duplicate_rows,
+                    local.new_customers,
+                    local.period_start,
+                    local.period_end,
+                ),
+                (
+                    uploaded.cleaned_rows,
+                    uploaded.appended_rows,
+                    uploaded.updated_rows,
+                    uploaded.skipped_duplicate_rows,
+                    uploaded.new_customers,
+                    uploaded.period_start,
+                    uploaded.period_end,
+                ),
+            )
+            self.assertEqual(master_path.read_bytes(), uploaded.master_csv)
+            self.assertEqual(
+                (temp_path / "output/analysis.csv").read_bytes(),
+                uploaded.analysis_csv,
+            )
+
     def test_first_seen_and_reimport_are_idempotent(self):
         settings = load_settings(PROJECT / "config/settings.json")
         # Legacy fixtures intentionally contain only the minimum lead fields.
@@ -62,59 +128,6 @@ class PipelineTest(unittest.TestCase):
             with (temp_path / "out2/new_customers.csv").open() as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual([row["Customer ID"] for row in rows], ["1003"])
-
-    def test_comparison_new_customers_are_period_relative(self):
-        settings = load_settings(PROJECT / "config/settings.json")
-
-        def row(customer_id, created_date):
-            return {
-                "Customer ID": customer_id,
-                "Created Date": created_date,
-                "Total": "100",
-            }
-
-        master_rows = [
-            row("old", "09/06/2025"),
-            row("old", "09/10/2025"),
-            row("last-year-new", "09/10/2025"),
-            row("before-previous", "08/23/2026"),
-            row("before-previous", "08/25/2026"),
-            row("previous-new", "08/25/2026"),
-            row("previous-new", "09/08/2026"),
-            row("current-new", "09/08/2026"),
-            row("current-new", "09/09/2026"),
-        ]
-
-        # Reproduce the old failure: this list contains only a current-period lead.
-        comparison = compare_periods(
-            master_rows,
-            [master_rows[-2]],
-            date(2026, 9, 7),
-            date(2026, 9, 20),
-            settings,
-        )
-
-        self.assertEqual(
-            {item["Period"]: item["New Customers"] for item in comparison},
-            {
-                "Current Period": 1,
-                "Previous Period": 1,
-                "Same Period Last Year": 1,
-            },
-        )
-
-    def test_comparison_marks_insufficient_history(self):
-        settings = load_settings(PROJECT / "config/settings.json")
-        master_rows = [
-            {"Customer ID": "first-known", "Created Date": "09/07/2025", "Total": "100"},
-            {"Customer ID": "later", "Created Date": "09/08/2026", "Total": "100"},
-        ]
-
-        comparison = compare_periods(
-            master_rows, [], date(2026, 9, 7), date(2026, 9, 20), settings
-        )
-
-        self.assertEqual(comparison[2]["New Customers"], "Insufficient history")
 
     def test_period_comparisons_are_split_into_hvac_and_plumbing(self):
         settings = load_settings(PROJECT / "config/settings.json")
@@ -168,11 +181,51 @@ class PipelineTest(unittest.TestCase):
         )
 
         self.assertEqual(set(comparisons), {"HVAC", "Plumbing"})
-        self.assertEqual(comparisons["HVAC"][0]["Records"], 3)
+        self.assertEqual(comparisons["HVAC"][0]["Records"], 2)
         self.assertEqual(comparisons["Plumbing"][0]["Records"], 2)
         self.assertEqual(comparisons["HVAC"][0]["New Customers"], 1)
         self.assertEqual(comparisons["HVAC"][0]["Unique Customers"], 2)
         self.assertEqual(comparisons["Plumbing"][0]["Unique Customers"], 2)
+        self.assertEqual(comparisons["HVAC"][0]["Revenue"], "150")
+        self.assertEqual(comparisons["Plumbing"][0]["Revenue"], "300")
+
+    def test_existing_job_group_is_replaced_by_latest_snapshot(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            master_path = temp_path / "master.csv"
+            original = {
+                "Customer ID": "customer-1",
+                "Created Date": "2026-09-01",
+                "Invoice Business Unit": "HVAC Service",
+                "Job Type": "Repair",
+                "Job Status": "Scheduled",
+                "Total": "100",
+            }
+            changed = {
+                **original,
+                "Completion Date": "09/02/2026",
+                "Job Status": "Completed",
+                "Total": "250",
+            }
+            master_path.write_bytes(csv_bytes([original], settings["master_columns"]))
+            upload = temp_path / "changed.csv"
+            upload.write_bytes(csv_bytes([changed], settings["master_columns"]))
+
+            result = run_import(upload, master_path, settings, temp_path / "out")
+            with master_path.open() as handle:
+                master_rows = list(csv.DictReader(handle))
+
+            self.assertEqual(result.appended_rows, 0)
+            self.assertEqual(result.updated_rows, 1)
+            self.assertEqual(result.skipped_duplicate_rows, 0)
+            self.assertEqual(len(master_rows), 1)
+            self.assertEqual(master_rows[0]["Job Status"], "Completed")
+            self.assertEqual(master_rows[0]["Total"], "250")
+
+            repeat = run_import(upload, master_path, settings, temp_path / "repeat")
+            self.assertEqual(repeat.updated_rows, 0)
+            self.assertEqual(repeat.skipped_duplicate_rows, 1)
 
     def test_category_period_comparisons_show_current_new_customer_gain_loss(self):
         settings = load_settings(PROJECT / "config/settings.json")
@@ -265,6 +318,27 @@ class PipelineTest(unittest.TestCase):
                 ("week-36", "09/01/2026"),
             ],
         )
+
+    def test_first_seen_same_day_choice_is_stable_and_prefers_opportunity(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        blank = {
+            "Customer ID": "same-day",
+            "Created Date": "09/01/2026",
+            "Invoice Business Unit": "Plumbing",
+            "Job Type": "Repair",
+            "Opportunity": "",
+        }
+        opportunity = {
+            **blank,
+            "Invoice Business Unit": "HVAC Service",
+            "Opportunity": "False",
+        }
+
+        forward = first_seen_customer_rows([blank, opportunity], settings)
+        reverse = first_seen_customer_rows([opportunity, blank], settings)
+
+        self.assertEqual(forward, [opportunity])
+        self.assertEqual(reverse, [opportunity])
 
     def test_analysis_csv_starts_with_category_period_sections(self):
         comparisons = {

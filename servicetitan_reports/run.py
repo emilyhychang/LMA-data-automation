@@ -44,7 +44,10 @@ def main() -> None:
     output_dir = args.output_dir or ROOT / "output" / args.csv.stem
     result = run_import(args.csv, args.master, settings, output_dir,
                         args.period_start, args.period_end)
-    print(f"Imported {result.appended_rows} records ({result.skipped_duplicate_rows} duplicate records skipped).")
+    print(
+        f"Added {result.appended_rows} records, updated {result.updated_rows}, "
+        f"and left {result.skipped_duplicate_rows} unchanged."
+    )
     print(f"New customers: {result.new_customers}. Period: {result.period_start} through {result.period_end}.")
     print(f"Report-ready files: {result.output_dir}")
 

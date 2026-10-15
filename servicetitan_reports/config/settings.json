@@ -1,7 +1,4 @@
 {
-  "customer_id_column": "Customer ID",
-  "activity_date_column": "Created Date",
-  "amount_column": "Total",
   "master_filename": "lma_master.csv",
   "new_leads_filename": "lma_new_leads_only.csv",
   "master_columns": [
@@ -48,10 +45,9 @@
     "Invoice Business Unit",
     "Job Type"
   ],
-  "dedupe_columns": [
+  "job_identity_columns": [
     "Customer ID",
     "Created Date",
-    "Completion Date",
     "Invoice Business Unit",
     "Job Type"
   ],

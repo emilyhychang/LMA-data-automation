@@ -10,8 +10,9 @@ from typing import Any, Callable
 from .pipeline import (
     UploadedImportResult,
     csv_bytes,
-    fingerprint,
+    first_seen_customer_rows,
     read_and_clean_csv_bytes,
+    row_snapshot,
     run_uploaded_import,
 )
 
@@ -60,10 +61,9 @@ def prepare_seed(
         new_leads_contents, settings, "New-leads-only dataset", allow_empty=True
     )
     master_rows = list({
-        fingerprint(row, settings["dedupe_columns"]): row
-        for row in master_rows
+        row_snapshot(row, settings): row for row in master_rows
     }.values())
-    lead_rows = list({row["Customer ID"]: row for row in lead_rows}.values())
+    lead_rows = first_seen_customer_rows(lead_rows, settings)
     return csv_bytes(master_rows, columns), csv_bytes(lead_rows, columns)
 
 
@@ -122,6 +122,7 @@ class PersistentDatasetStore:
                     source_name text NOT NULL,
                     cleaned_rows integer NOT NULL,
                     appended_rows integer NOT NULL,
+                    updated_rows integer NOT NULL DEFAULT 0,
                     skipped_duplicate_rows integer NOT NULL,
                     new_customers integer NOT NULL
                 )
@@ -132,6 +133,10 @@ class PersistentDatasetStore:
                     cleaned_csv bytea NOT NULL,
                     analysis_csv bytea NOT NULL
                 )
+            """)
+            cursor.execute("""
+                ALTER TABLE lma_private.import_log
+                ADD COLUMN IF NOT EXISTS updated_rows integer NOT NULL DEFAULT 0
             """)
 
     def status(self) -> DatasetStatus | None:
@@ -231,12 +236,9 @@ class PersistentDatasetStore:
 
             version, stored_master, stored_leads = state
             master = _uncompressed(stored_master)
-            leads = _uncompressed(stored_leads)
             result = run_uploaded_import(
                 source_contents=source_contents,
-                source_name=source_name,
                 master_contents=master,
-                new_leads_contents=leads,
                 settings=self.settings,
             )
             next_version = version + 1
@@ -263,14 +265,15 @@ class PersistentDatasetStore:
             cursor.execute("""
                 INSERT INTO lma_private.import_log (
                     dataset_version, imported_by, source_name, cleaned_rows,
-                    appended_rows, skipped_duplicate_rows, new_customers
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    appended_rows, updated_rows, skipped_duplicate_rows, new_customers
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 next_version,
                 actor,
                 source_name,
                 result.cleaned_rows,
                 result.appended_rows,
+                result.updated_rows,
                 result.skipped_duplicate_rows,
                 result.new_customers,
             ))

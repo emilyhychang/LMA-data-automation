@@ -128,11 +128,12 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
 
 result = st.session_state.get("import_result")
 if result:
-    first, second, third, fourth = st.columns(4)
+    first, second, third, fourth, fifth = st.columns(5)
     first.metric("Valid records", f"{result.cleaned_rows:,}")
     second.metric("Added to master", f"{result.appended_rows:,}")
-    third.metric("Duplicates skipped", f"{result.skipped_duplicate_rows:,}")
-    fourth.metric("New customers", f"{result.new_customers:,}")
+    third.metric("Updated records", f"{getattr(result, 'updated_rows', 0):,}")
+    fourth.metric("Unchanged records", f"{result.skipped_duplicate_rows:,}")
+    fifth.metric("New customers", f"{result.new_customers:,}")
 
     raw_stem = st.session_state["raw_stem"]
     st.subheader("Import downloads")
@@ -146,14 +147,11 @@ if result:
     )
 
 master = leads = current_status = None
-master_rows = lead_rows = []
+master_rows = []
 try:
     master, leads, current_status = store.downloads()
     master_rows = read_and_clean_csv_bytes(
         master, SETTINGS, "Master dataset", allow_empty=True
-    )
-    lead_rows = read_and_clean_csv_bytes(
-        leads, SETTINGS, "New-leads-only dataset", allow_empty=True
     )
 except Exception:
     st.warning("The latest shared datasets could not be prepared.")
