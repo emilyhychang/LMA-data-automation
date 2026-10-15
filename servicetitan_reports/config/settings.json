@@ -54,5 +54,29 @@
     "Completion Date",
     "Invoice Business Unit",
     "Job Type"
-  ]
+  ],
+  "invoice_type_categories": {
+    "Backflow": "Plumbing",
+    "Drains": "Plumbing",
+    "HVAC Install": "HVAC",
+    "HVAC Maintenance": "HVAC",
+    "HVAC Sales": "HVAC",
+    "HVAC Service": "HVAC",
+    "Lining Install - CA": "Plumbing",
+    "Lining Install Commercial": "Plumbing",
+    "Plumbing": "Plumbing",
+    "Plumbing Install": "Plumbing",
+    "Plumbing Maintenance": "Plumbing",
+    "Plumbing Sales": "Plumbing",
+    "Plumbing Service": "Plumbing",
+    "Re-Pipe": "Plumbing",
+    "Restoration EMS": "Restoration",
+    "Restoration RECON": "Restoration",
+    "Tankless": "Plumbing",
+    "Water Filtration": "Plumbing",
+    "Restoration Tech Caused": "Other",
+    "Lining Install - NV": "Plumbing",
+    "Plumbing Apprentices": "Other",
+    "Restoration Contents": "Restoration"
+  }
 }

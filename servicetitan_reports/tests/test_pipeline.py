@@ -8,7 +8,17 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "src"))
 
-from servicetitan_reports.pipeline import compare_periods, csv_bytes, load_settings, run_import
+from servicetitan_reports.pipeline import (
+    analysis_csv_bytes,
+    category_period_comparisons,
+    compare_periods,
+    csv_bytes,
+    first_seen_customer_rows,
+    job_status_analysis,
+    load_settings,
+    run_import,
+    weekly_opportunity_ytd,
+)
 
 
 class PipelineTest(unittest.TestCase):
@@ -34,6 +44,8 @@ class PipelineTest(unittest.TestCase):
 
             first = run_import(period_1, temp_path / "master.csv", settings, temp_path / "out1")
             self.assertEqual((first.appended_rows, first.new_customers), (3, 2))
+            self.assertTrue((temp_path / "out1/analysis.csv").is_file())
+            self.assertFalse((temp_path / "out1/period_comparison.csv").exists())
             with (temp_path / "out1/period_1_cleaned.csv").open() as handle:
                 cleaned = list(csv.DictReader(handle))
 
@@ -103,6 +115,231 @@ class PipelineTest(unittest.TestCase):
         )
 
         self.assertEqual(comparison[2]["New Customers"], "Insufficient history")
+
+    def test_period_comparisons_are_split_into_hvac_and_plumbing(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        master_rows = [
+            {
+                "Customer ID": "existing-across-categories",
+                "Created Date": "09/08/2025",
+                "Invoice Business Unit": "Plumbing",
+                "Total": "50",
+            },
+            {
+                "Customer ID": "existing-across-categories",
+                "Created Date": "09/08/2026",
+                "Invoice Business Unit": "HVAC Service",
+                "Total": "50",
+            },
+            {
+                "Customer ID": "hvac-1",
+                "Created Date": "09/08/2026",
+                "Invoice Business Unit": "HVAC Service",
+                "Total": "100",
+            },
+            {
+                "Customer ID": "plumbing-1",
+                "Created Date": "09/09/2026",
+                "Invoice Business Unit": "Plumbing",
+                "Total": "200",
+            },
+            {
+                "Customer ID": "other-1",
+                "Created Date": "09/10/2026",
+                "Invoice Business Unit": "Electrical",
+                "Total": "300",
+            },
+            {
+                "Customer ID": "dual-category",
+                "Created Date": "09/09/2026",
+                "Invoice Business Unit": "Plumbing Service",
+                "Total": "100",
+            },
+            {
+                "Customer ID": "dual-category",
+                "Created Date": "09/10/2026",
+                "Invoice Business Unit": "HVAC Service",
+                "Total": "100",
+            },
+        ]
+
+        comparisons = category_period_comparisons(
+            master_rows, date(2026, 9, 7), date(2026, 9, 20), settings
+        )
+
+        self.assertEqual(set(comparisons), {"HVAC", "Plumbing"})
+        self.assertEqual(comparisons["HVAC"][0]["Records"], 3)
+        self.assertEqual(comparisons["Plumbing"][0]["Records"], 2)
+        self.assertEqual(comparisons["HVAC"][0]["New Customers"], 1)
+        self.assertEqual(comparisons["HVAC"][0]["Unique Customers"], 2)
+        self.assertEqual(comparisons["Plumbing"][0]["Unique Customers"], 2)
+
+    def test_category_period_comparisons_show_current_new_customer_gain_loss(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        master_rows = []
+        for category, current, previous, last_year in [
+            ("HVAC Service", 78, 126, 34),
+            ("Plumbing", 333, 312, 358),
+        ]:
+            for period_date, count in [
+                ("09/21/2026", current),
+                ("09/07/2026", previous),
+                ("09/21/2025", last_year),
+            ]:
+                master_rows.extend({
+                    "Customer ID": f"{category}-{period_date}-{index}",
+                    "Created Date": period_date,
+                    "Invoice Business Unit": category,
+                    "Total": "0",
+                } for index in range(count))
+        master_rows.append({
+            "Customer ID": "history",
+            "Created Date": "01/01/2025",
+            "Invoice Business Unit": "Plumbing",
+            "Total": "0",
+        })
+
+        comparisons = category_period_comparisons(
+            master_rows, date(2026, 9, 21), date(2026, 10, 4), settings
+        )
+
+        self.assertEqual(
+            [row["New Customer Gain/Loss"] for row in comparisons["HVAC"]],
+            ["—", "-38.1%", "+129.4%"],
+        )
+        self.assertEqual(
+            [row["New Customer Gain/Loss"] for row in comparisons["Plumbing"]],
+            ["—", "+6.7%", "-7.0%"],
+        )
+
+    def test_new_customer_gain_loss_is_unavailable_for_zero_comparison(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        master_rows = [{
+            "Customer ID": "history",
+            "Created Date": "01/01/2025",
+            "Invoice Business Unit": "HVAC Service",
+            "Total": "0",
+        }, {
+            "Customer ID": "current",
+            "Created Date": "09/21/2026",
+            "Invoice Business Unit": "HVAC Service",
+            "Total": "0",
+        }]
+
+        comparisons = category_period_comparisons(
+            master_rows, date(2026, 9, 21), date(2026, 10, 4), settings
+        )
+
+        self.assertEqual(comparisons["HVAC"][1]["New Customer Gain/Loss"], "N/A")
+
+    def test_job_status_analysis_has_one_row_per_job_type(self):
+        analysis, columns = job_status_analysis([
+            {"Job Type": "Repair", "Job Status": "Completed"},
+            {"Job Type": "Repair", "Job Status": "Completed"},
+            {"Job Type": "Repair", "Job Status": "Scheduled"},
+            {"Job Type": "Install", "Job Status": "Scheduled"},
+        ])
+
+        self.assertEqual(columns, ["Job Type", "Completed", "Scheduled"])
+        self.assertEqual(analysis, [
+            {"Job Type": "Install", "Completed": 0, "Scheduled": 1},
+            {"Job Type": "Repair", "Completed": 2, "Scheduled": 1},
+        ])
+
+    def test_first_seen_rows_rebuild_missing_new_lead_weeks_from_master(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        rows = [
+            {"Customer ID": "week-35", "Created Date": "08/25/2026"},
+            {"Customer ID": "week-35", "Created Date": "09/10/2026"},
+            {"Customer ID": "week-36", "Created Date": "09/01/2026"},
+            {"Customer ID": "older", "Created Date": "01/01/2026"},
+        ]
+
+        rebuilt = first_seen_customer_rows(rows, settings)
+
+        self.assertEqual(
+            [(row["Customer ID"], row["Created Date"]) for row in rebuilt],
+            [
+                ("older", "01/01/2026"),
+                ("week-35", "08/25/2026"),
+                ("week-36", "09/01/2026"),
+            ],
+        )
+
+    def test_analysis_csv_starts_with_category_period_sections(self):
+        comparisons = {
+            category: [{
+                "Period": "Current Period",
+                "Start": "2026-09-07",
+                "End": "2026-09-20",
+                "Records": records,
+                "Unique Customers": customers,
+                "New Customers": new_customers,
+                "Revenue": revenue,
+            }]
+            for category, records, customers, new_customers, revenue in [
+                ("HVAC", 200, 126, 75, "25000"),
+                ("Plumbing", 500, 304, 190, "80000"),
+            ]
+        }
+
+        contents = analysis_csv_bytes(
+            comparisons,
+            [{"Job Type": "Repair", "Completed": 2, "Scheduled": 1}],
+            ["Job Type", "Completed", "Scheduled"],
+        )
+        rows = list(csv.reader(contents.decode().splitlines()))
+
+        self.assertEqual(rows[0], ["HVAC Period Comparison"])
+        self.assertEqual(rows[1], [
+            "Period", "Start", "End", "Records", "Unique Customers",
+            "New Customers", "New Customer Gain/Loss", "Revenue",
+        ])
+        self.assertEqual(rows[2][0:6], [
+            "Current Period", "2026-09-07", "2026-09-20", "200", "126", "75",
+        ])
+        self.assertEqual(rows[4], ["Plumbing Period Comparison"])
+        self.assertEqual(rows[8], ["Job Type Status Analysis"])
+        self.assertEqual(rows[9], ["Job Type", "Completed", "Scheduled"])
+        self.assertEqual(rows[10], ["Repair", "2", "1"])
+
+    def test_weekly_opportunity_ytd_compares_same_weeks(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        rows = [
+            {
+                "Created Date": "01/06/2026",
+                "Invoice Business Unit": "Plumbing Service",
+                "Opportunity": "True",
+            },
+            {
+                "Created Date": "01/07/2026",
+                "Invoice Business Unit": "Plumbing Service",
+                "Opportunity": "False",
+            },
+            {
+                "Created Date": "01/07/2025",
+                "Invoice Business Unit": "Plumbing Sales",
+                "Opportunity": "TRUE",
+            },
+            {
+                "Created Date": "12/01/2025",
+                "Invoice Business Unit": "Plumbing Service",
+                "Opportunity": "True",
+            },
+            {
+                "Created Date": "03/10/2026",
+                "Invoice Business Unit": "HVAC Service",
+                "Opportunity": "True",
+            },
+        ]
+
+        chart, years = weekly_opportunity_ytd(rows, "Plumbing", settings)
+
+        self.assertEqual(years, (2025, 2026))
+        self.assertEqual(len(chart), 52)
+        self.assertEqual(chart[1], {"Week": 2, "2025": 1, "2026": 2})
+        self.assertEqual(sum(row["2025"] for row in chart), 2)
+        self.assertIsNone(chart[-1]["2026"])
 
 
 if __name__ == "__main__":

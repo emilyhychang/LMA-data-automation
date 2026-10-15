@@ -27,6 +27,16 @@ class DatasetStatus:
     updated_by: str
 
 
+@dataclass(frozen=True)
+class ImportHistoryEntry:
+    dataset_version: int
+    imported_at: datetime
+    imported_by: str
+    source_name: str
+    cleaned_csv: bytes
+    analysis_csv: bytes
+
+
 def _compressed(contents: bytes) -> bytes:
     return zlib.compress(contents, level=6)
 
@@ -116,6 +126,13 @@ class PersistentDatasetStore:
                     new_customers integer NOT NULL
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS lma_private.import_outputs (
+                    dataset_version bigint PRIMARY KEY,
+                    cleaned_csv bytea NOT NULL,
+                    analysis_csv bytea NOT NULL
+                )
+            """)
 
     def status(self) -> DatasetStatus | None:
         with self.connect() as connection, connection.cursor() as cursor:
@@ -165,6 +182,32 @@ class PersistentDatasetStore:
             _uncompressed(leads),
             DatasetStatus(version, updated_at, updated_by),
         )
+
+    def import_history(self, limit: int = BACKUP_RETENTION) -> list[ImportHistoryEntry]:
+        """Return recent generated downloads, newest first."""
+
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT log.dataset_version, log.imported_at, log.imported_by,
+                       log.source_name, outputs.cleaned_csv, outputs.analysis_csv
+                FROM lma_private.import_log AS log
+                JOIN lma_private.import_outputs AS outputs
+                  ON outputs.dataset_version = log.dataset_version
+                ORDER BY log.imported_at DESC, log.id DESC
+                LIMIT %s
+            """, (limit,))
+            rows = cursor.fetchall()
+        return [
+            ImportHistoryEntry(
+                dataset_version=version,
+                imported_at=imported_at,
+                imported_by=imported_by,
+                source_name=source_name,
+                cleaned_csv=_uncompressed(cleaned),
+                analysis_csv=_uncompressed(analysis),
+            )
+            for version, imported_at, imported_by, source_name, cleaned, analysis in rows
+        ]
 
     def import_report(
         self,
@@ -232,10 +275,28 @@ class PersistentDatasetStore:
                 result.new_customers,
             ))
             cursor.execute("""
+                INSERT INTO lma_private.import_outputs (
+                    dataset_version, cleaned_csv, analysis_csv
+                ) VALUES (%s, %s, %s)
+            """, (
+                next_version,
+                _compressed(result.cleaned_csv),
+                _compressed(result.analysis_csv),
+            ))
+            cursor.execute("""
                 DELETE FROM lma_private.dataset_backups
                 WHERE id NOT IN (
                     SELECT id
                     FROM lma_private.dataset_backups
+                    ORDER BY id DESC
+                    LIMIT %s
+                )
+            """, (BACKUP_RETENTION,))
+            cursor.execute("""
+                DELETE FROM lma_private.import_outputs
+                WHERE dataset_version NOT IN (
+                    SELECT dataset_version
+                    FROM lma_private.import_log
                     ORDER BY id DESC
                     LIMIT %s
                 )

@@ -70,7 +70,7 @@ class StorageTest(unittest.TestCase):
         )
         store.ensure_schema()
 
-        self.assertEqual(len(statements), 4)
+        self.assertEqual(len(statements), 5)
         self.assertTrue(all("lma_private" in statement for statement in statements))
 
 
