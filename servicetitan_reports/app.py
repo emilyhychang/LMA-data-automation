@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -19,6 +20,10 @@ from servicetitan_reports.pipeline import (  # noqa: E402
     weekly_opportunity_ytd,
 )
 from servicetitan_reports.storage import PersistentDatasetStore  # noqa: E402
+from servicetitan_reports.zip_maps import (  # noqa: E402
+    publish_zip_summaries,
+    zip_code_summaries,
+)
 
 
 SETTINGS = load_settings(ROOT / "config" / "settings.json")
@@ -30,6 +35,44 @@ def secret_list(section: str, key: str) -> set[str]:
         for value in st.secrets.get(section, {}).get(key, [])
         if str(value).strip()
     }
+
+
+def refresh_zip_map_sources(result) -> bool:
+    """Publish the latest ZIP summaries when Google Sheets is configured."""
+
+    sheet_settings = dict(st.secrets.get("google_sheets", {}))
+    revenue_id = str(sheet_settings.get("revenue_spreadsheet_id", "")).strip()
+    leads_id = str(sheet_settings.get("new_leads_spreadsheet_id", "")).strip()
+    if not revenue_id or not leads_id:
+        return False
+
+    account = dict(st.secrets.get("google_service_account", {}))
+    credentials_file = str(sheet_settings.get("credentials_file", "")).strip()
+    publish_zip_summaries(
+        result.zip_revenue_rows,
+        result.zip_new_lead_rows,
+        revenue_spreadsheet_id=revenue_id,
+        new_leads_spreadsheet_id=leads_id,
+        worksheet_name=str(sheet_settings.get("worksheet_name", "Sheet1")),
+        service_account_info=account or None,
+        credentials_file=credentials_file or None,
+    )
+    return True
+
+
+def render_zip_ranking(rows) -> None:
+    """Render a compact top-20 ZIP list beside a heatmap."""
+
+    zip_codes = [str(row.get("Zip", "")) for row in rows[:20]]
+    if not zip_codes:
+        st.info("No ZIP data is available.")
+        return
+    st.markdown(
+        '<div class="zip-ranking">'
+        + "".join(f"<div>{zip_code}</div>" for zip_code in zip_codes)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def require_approved_user() -> tuple[str, bool]:
@@ -53,7 +96,7 @@ def require_approved_user() -> tuple[str, bool]:
     return email, email in admins
 
 
-st.set_page_config(page_title="ServiceTitan File Cleaner", layout="centered")
+st.set_page_config(page_title="ServiceTitan File Cleaner", layout="wide")
 email, is_admin = require_approved_user()
 
 database_url = str(st.secrets.get("database", {}).get("url", "")).strip()
@@ -120,7 +163,25 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
             result = store.import_report(raw_upload.getvalue(), raw_upload.name, email)
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem
-        st.success("Both shared datasets were saved. A backup of the prior version was retained.")
+        try:
+            maps_refreshed = refresh_zip_map_sources(result)
+            st.session_state["zip_map_refresh"] = (
+                "refreshed" if maps_refreshed else "not_configured"
+            )
+        except Exception:
+            st.session_state["zip_map_refresh"] = "failed"
+        st.success(
+            "Both shared datasets were saved. A backup of the prior version was retained."
+        )
+        if st.session_state["zip_map_refresh"] == "refreshed":
+            st.success("The revenue and new-lead map data was refreshed.")
+        elif st.session_state["zip_map_refresh"] == "not_configured":
+            st.warning("The map data was not refreshed because Google Sheets is not configured.")
+        else:
+            st.warning(
+                "The datasets were saved, but the map data could not be refreshed. "
+                "Check the Google Sheets sharing and service-account settings."
+            )
     except ValueError as error:
         st.error(f"Nothing was saved: {error}")
     except Exception:
@@ -186,8 +247,59 @@ if result and master_rows:
             },
         )
 
+derived_lead_rows = first_seen_customer_rows(master_rows, SETTINGS) if master_rows else []
+
 if master_rows:
-    derived_lead_rows = first_seen_customer_rows(master_rows, SETTINGS)
+    zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
+        master_rows, derived_lead_rows, SETTINGS
+    )
+    st.subheader(f"Top ZIP codes and heatmaps — {zip_year}")
+    st.caption(
+        "Revenue and first-time customers are ranked by ZIP code for the latest year. "
+        "The heatmaps refresh from the two connected Google Sheets."
+    )
+    st.markdown(
+        """
+        <style>
+        .zip-ranking {
+            padding: 0.15rem 0 0 0.2rem;
+        }
+        .zip-ranking div {
+            font-size: 0.92rem;
+            line-height: 1.55;
+            white-space: nowrap;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    leads_section, revenue_section = st.columns(2, gap="large")
+    looker_settings = dict(st.secrets.get("looker_studio", {}))
+    revenue_embed_url = str(looker_settings.get("revenue_embed_url", "")).strip()
+    leads_embed_url = str(looker_settings.get("new_leads_embed_url", "")).strip()
+
+    with leads_section:
+        st.write("**New leads**")
+        leads_list, leads_map = st.columns([1, 4], gap="small")
+        with leads_list:
+            render_zip_ranking(zip_new_lead_rows)
+        with leads_map:
+            if leads_embed_url:
+                components.iframe(leads_embed_url, height=540, scrolling=False)
+            else:
+                st.info("The new-lead heatmap embed URL is not configured yet.")
+
+    with revenue_section:
+        st.write("**Revenue**")
+        revenue_list, revenue_map = st.columns([1, 4], gap="small")
+        with revenue_list:
+            render_zip_ranking(zip_revenue_rows)
+        with revenue_map:
+            if revenue_embed_url:
+                components.iframe(revenue_embed_url, height=540, scrolling=False)
+            else:
+                st.info("The revenue heatmap embed URL is not configured yet.")
+
     st.subheader("Weekly opportunities — YTD")
     st.caption(
         "Count of nonblank Opportunity values for each customer's first master "

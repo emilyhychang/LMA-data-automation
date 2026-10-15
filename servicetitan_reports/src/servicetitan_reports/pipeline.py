@@ -56,6 +56,9 @@ class UploadedImportResult:
     master_csv: bytes
     new_leads_csv: bytes
     analysis_csv: bytes
+    zip_year: int | None
+    zip_revenue_rows: list[dict[str, str | int | float]]
+    zip_new_lead_rows: list[dict[str, str | int | float]]
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,9 @@ class ProcessedImport:
     new_leads_rows: list[dict[str, str]]
     category_comparisons: dict[str, list[dict[str, str | int]]]
     analysis_csv: bytes
+    zip_year: int | None
+    zip_revenue_rows: list[dict[str, str | int | float]]
+    zip_new_lead_rows: list[dict[str, str | int | float]]
     appended_rows: int
     updated_rows: int
     skipped_rows: int
@@ -747,6 +753,12 @@ def process_import_rows(
     category_comparisons = category_period_comparisons(
         final_master, start, end, settings, new_leads_rows
     )
+    # Import locally to keep the core CSV helpers usable without Google packages.
+    from .zip_maps import zip_code_summaries
+
+    zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
+        final_master, new_leads_rows, settings
+    )
     analysis_rows, analysis_columns = job_status_analysis(cleaned_rows)
     return ProcessedImport(
         cleaned_rows=cleaned_rows,
@@ -757,6 +769,9 @@ def process_import_rows(
         analysis_csv=analysis_csv_bytes(
             category_comparisons, analysis_rows, analysis_columns
         ),
+        zip_year=zip_year,
+        zip_revenue_rows=zip_revenue_rows,
+        zip_new_lead_rows=zip_new_lead_rows,
         appended_rows=len(cleaned_rows) - updated - skipped,
         updated_rows=updated,
         skipped_rows=skipped,
@@ -856,4 +871,7 @@ def run_uploaded_import(
         master_csv=csv_bytes(processed.master_rows, columns),
         new_leads_csv=csv_bytes(processed.new_leads_rows, columns),
         analysis_csv=processed.analysis_csv,
+        zip_year=processed.zip_year,
+        zip_revenue_rows=processed.zip_revenue_rows,
+        zip_new_lead_rows=processed.zip_new_lead_rows,
     )
