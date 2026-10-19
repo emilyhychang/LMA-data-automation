@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -28,6 +29,17 @@ from servicetitan_reports.zip_maps import (  # noqa: E402
 
 SETTINGS = load_settings(ROOT / "config" / "settings.json")
 
+REVENUE_SPREADSHEET_ID = "19IdcStsC024mIoOEoel-I-tZO-dBSby3jwHcUl80Pgo"
+NEW_LEADS_SPREADSHEET_ID = "1QAtvpIVhxOPc72Px3A1j6l9exDA4dPgVrsQUWcvFa2A"
+REVENUE_HEATMAP_URL = (
+    "https://datastudio.google.com/embed/reporting/"
+    "e537e267-faf6-4518-aa6c-a28e1e35c6e6/page/S0t7F"
+)
+NEW_LEADS_HEATMAP_URL = (
+    "https://datastudio.google.com/embed/reporting/"
+    "939c1d6e-32bf-4f88-a26d-d32bedad3dcc/page/ixt7F"
+)
+
 
 def secret_list(section: str, key: str) -> set[str]:
     return {
@@ -38,21 +50,28 @@ def secret_list(section: str, key: str) -> set[str]:
 
 
 def refresh_zip_map_sources(result) -> bool:
-    """Publish the latest ZIP summaries when Google Sheets is configured."""
+    """Publish ZIP summaries when service-account credentials are configured."""
 
     sheet_settings = dict(st.secrets.get("google_sheets", {}))
-    revenue_id = str(sheet_settings.get("revenue_spreadsheet_id", "")).strip()
-    leads_id = str(sheet_settings.get("new_leads_spreadsheet_id", "")).strip()
-    if not revenue_id or not leads_id:
+    account_json = str(sheet_settings.get("service_account_json", "")).strip()
+    account = (
+        json.loads(account_json)
+        if account_json
+        else dict(st.secrets.get("google_service_account", {}))
+    )
+    credentials_file = str(sheet_settings.get("credentials_file", "")).strip()
+    if not account and not credentials_file:
         return False
 
-    account = dict(st.secrets.get("google_service_account", {}))
-    credentials_file = str(sheet_settings.get("credentials_file", "")).strip()
     publish_zip_summaries(
         result.zip_revenue_rows,
         result.zip_new_lead_rows,
-        revenue_spreadsheet_id=revenue_id,
-        new_leads_spreadsheet_id=leads_id,
+        revenue_spreadsheet_id=str(
+            sheet_settings.get("revenue_spreadsheet_id", REVENUE_SPREADSHEET_ID)
+        ).strip(),
+        new_leads_spreadsheet_id=str(
+            sheet_settings.get("new_leads_spreadsheet_id", NEW_LEADS_SPREADSHEET_ID)
+        ).strip(),
         worksheet_name=str(sheet_settings.get("worksheet_name", "Sheet1")),
         service_account_info=account or None,
         credentials_file=credentials_file or None,
@@ -176,7 +195,10 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
         if st.session_state["zip_map_refresh"] == "refreshed":
             st.success("The revenue and new-lead map data was refreshed.")
         elif st.session_state["zip_map_refresh"] == "not_configured":
-            st.warning("The map data was not refreshed because Google Sheets is not configured.")
+            st.warning(
+                "The report was saved, but the map source sheets were not refreshed "
+                "because the deployed app is missing its Google service-account credential."
+            )
         else:
             st.warning(
                 "The datasets were saved, but the map data could not be refreshed. "
@@ -275,8 +297,12 @@ if master_rows:
     )
     leads_section, revenue_section = st.columns(2, gap="large")
     looker_settings = dict(st.secrets.get("looker_studio", {}))
-    revenue_embed_url = str(looker_settings.get("revenue_embed_url", "")).strip()
-    leads_embed_url = str(looker_settings.get("new_leads_embed_url", "")).strip()
+    revenue_embed_url = str(
+        looker_settings.get("revenue_embed_url", REVENUE_HEATMAP_URL)
+    ).strip()
+    leads_embed_url = str(
+        looker_settings.get("new_leads_embed_url", NEW_LEADS_HEATMAP_URL)
+    ).strip()
 
     with leads_section:
         st.write("**New leads**")
