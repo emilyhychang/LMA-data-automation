@@ -85,15 +85,18 @@ class ZipMapTest(unittest.TestCase):
             [{"Zip": "92109", "New leads": 2}],
             revenue_spreadsheet_id="revenue",
             new_leads_spreadsheet_id="leads",
+            generated_at="2026-10-19T09:30:00-07:00",
             worksheet_name="Sheet1",
             client=client,
         )
 
         self.assertEqual(client.books["revenue"].calls[-1][1]["values"], [
-            ["Zip", "Revenue"], ["92037", 10.5]
+            ["Zip", "Revenue", "Map data generated at"],
+            ["92037", 10.5, "2026-10-19T09:30:00-07:00"],
         ])
         self.assertEqual(client.books["leads"].calls[-1][1]["values"], [
-            ["Zip", "New leads"], ["92109", 2]
+            ["Zip", "New leads", "Map data generated at"],
+            ["92109", 2, "2026-10-19T09:30:00-07:00"],
         ])
 
 

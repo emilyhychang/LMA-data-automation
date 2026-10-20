@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -49,7 +51,7 @@ def secret_list(section: str, key: str) -> set[str]:
     }
 
 
-def refresh_zip_map_sources(result) -> bool:
+def refresh_zip_map_sources(result) -> str | None:
     """Publish ZIP summaries when service-account credentials are configured."""
 
     sheet_settings = dict(st.secrets.get("google_sheets", {}))
@@ -61,8 +63,11 @@ def refresh_zip_map_sources(result) -> bool:
     )
     credentials_file = str(sheet_settings.get("credentials_file", "")).strip()
     if not account and not credentials_file:
-        return False
+        return None
 
+    generated_at = datetime.now(
+        ZoneInfo("America/Los_Angeles")
+    ).isoformat(timespec="seconds")
     publish_zip_summaries(
         result.zip_revenue_rows,
         result.zip_new_lead_rows,
@@ -72,11 +77,12 @@ def refresh_zip_map_sources(result) -> bool:
         new_leads_spreadsheet_id=str(
             sheet_settings.get("new_leads_spreadsheet_id", NEW_LEADS_SPREADSHEET_ID)
         ).strip(),
+        generated_at=generated_at,
         worksheet_name=str(sheet_settings.get("worksheet_name", "Sheet1")),
         service_account_info=account or None,
         credentials_file=credentials_file or None,
     )
-    return True
+    return generated_at
 
 
 def render_zip_ranking(rows) -> None:
@@ -183,17 +189,24 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem
         try:
-            maps_refreshed = refresh_zip_map_sources(result)
+            map_refresh_time = refresh_zip_map_sources(result)
             st.session_state["zip_map_refresh"] = (
-                "refreshed" if maps_refreshed else "not_configured"
+                "refreshed" if map_refresh_time else "not_configured"
             )
+            if map_refresh_time:
+                st.session_state["zip_map_refresh_at"] = map_refresh_time
         except Exception:
             st.session_state["zip_map_refresh"] = "failed"
         st.success(
             "Both shared datasets were saved. A backup of the prior version was retained."
         )
         if st.session_state["zip_map_refresh"] == "refreshed":
-            st.success("The revenue and new-lead map data was refreshed.")
+            refresh_label = datetime.fromisoformat(
+                st.session_state["zip_map_refresh_at"]
+            ).strftime("%B %-d, %Y at %-I:%M:%S %p %Z")
+            st.success(
+                f"The revenue and new-lead map source data was generated {refresh_label}."
+            )
         elif st.session_state["zip_map_refresh"] == "not_configured":
             st.warning(
                 "The report was saved, but the map source sheets were not refreshed "
@@ -280,6 +293,15 @@ if master_rows:
         "Revenue and first-time customers are ranked by ZIP code for the latest year. "
         "The heatmaps refresh from the two connected Google Sheets."
     )
+    map_refresh_time = st.session_state.get("zip_map_refresh_at")
+    if map_refresh_time:
+        refresh_label = datetime.fromisoformat(map_refresh_time).strftime(
+            "%B %-d, %Y at %-I:%M:%S %p %Z"
+        )
+        st.info(
+            f"Latest map source: {refresh_label}. The maps are current when their "
+            "displayed ‘Map data generated at’ time matches this time."
+        )
     st.markdown(
         """
         <style>
@@ -361,6 +383,64 @@ try:
     if history:
         st.subheader("Generated file history")
         st.caption("The 25 most recent sets of generated files are retained.")
+        if st.button("Remove Duplicates", key="preview-history-duplicates"):
+            st.session_state["history_duplicate_preview"] = (
+                store.duplicate_import_history()
+            )
+            st.session_state["confirm_history_duplicate_removal"] = False
+
+        duplicate_preview = st.session_state.get("history_duplicate_preview")
+        if duplicate_preview is not None:
+            if not duplicate_preview:
+                st.info("No duplicate upload-history records were found.")
+            else:
+                st.write(
+                    f"{len(duplicate_preview)} duplicate history record(s) "
+                    "will be removed:"
+                )
+                st.dataframe(
+                    [{
+                        "Remove upload": item.duplicate.imported_at.strftime(
+                            "%Y-%m-%d %H:%M %Z"
+                        ),
+                        "File": item.duplicate.source_name,
+                        "Dataset version": item.duplicate.dataset_version,
+                        "Keep latest successful upload": (
+                            item.keeper.imported_at.strftime("%Y-%m-%d %H:%M %Z")
+                        ),
+                    } for item in duplicate_preview],
+                    hide_index=True,
+                    width="stretch",
+                )
+                st.warning(
+                    "This removes duplicate upload-history entries only. Master "
+                    "CSVs, backups, generated analytics, and map data are not changed."
+                )
+                confirmed = st.checkbox(
+                    "I confirm that I want to remove these duplicate history records.",
+                    key="confirm_history_duplicate_removal",
+                )
+                if st.button(
+                    "Confirm Removal",
+                    type="primary",
+                    disabled=not confirmed,
+                    key="confirm-history-duplicate-removal",
+                ):
+                    removed = store.remove_duplicate_import_history(
+                        item.duplicate.record_id for item in duplicate_preview
+                    )
+                    removed_ids = {
+                        item.duplicate.record_id for item in duplicate_preview
+                    }
+                    history = [
+                        entry for entry in history
+                        if entry.record_id not in removed_ids
+                    ]
+                    st.session_state.pop("history_duplicate_preview", None)
+                    st.success(
+                        f"Removed {removed} duplicate upload-history record(s)."
+                    )
+
         for entry in history:
             source_stem = Path(entry.source_name).stem
             date_label = entry.imported_at.strftime("%Y-%m-%d %H:%M %Z")

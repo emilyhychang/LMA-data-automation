@@ -114,6 +114,7 @@ def publish_zip_summaries(
     *,
     revenue_spreadsheet_id: str,
     new_leads_spreadsheet_id: str,
+    generated_at: str,
     worksheet_name: str = "Sheet1",
     service_account_info: Mapping[str, Any] | None = None,
     credentials_file: str | Path | None = None,
@@ -124,17 +125,26 @@ def publish_zip_summaries(
     google_client = client or _service_account_client(
         service_account_info, credentials_file
     )
+    timestamp_column = "Map data generated at"
+    timestamped_revenue_rows = [
+        {**row, timestamp_column: generated_at}
+        for row in revenue_rows
+    ]
+    timestamped_new_lead_rows = [
+        {**row, timestamp_column: generated_at}
+        for row in new_lead_rows
+    ]
     _replace_worksheet(
         google_client,
         revenue_spreadsheet_id,
         worksheet_name,
-        ("Zip", "Revenue"),
-        revenue_rows,
+        ("Zip", "Revenue", timestamp_column),
+        timestamped_revenue_rows,
     )
     _replace_worksheet(
         google_client,
         new_leads_spreadsheet_id,
         worksheet_name,
-        ("Zip", "New leads"),
-        new_lead_rows,
+        ("Zip", "New leads", timestamp_column),
+        timestamped_new_lead_rows,
     )

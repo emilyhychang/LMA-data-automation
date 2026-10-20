@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import zlib
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,12 +31,20 @@ class DatasetStatus:
 
 @dataclass(frozen=True)
 class ImportHistoryEntry:
+    record_id: int
     dataset_version: int
     imported_at: datetime
     imported_by: str
     source_name: str
+    content_hash: str | None
     cleaned_csv: bytes
     analysis_csv: bytes
+
+
+@dataclass(frozen=True)
+class DuplicateImportHistoryEntry:
+    duplicate: ImportHistoryEntry
+    keeper: ImportHistoryEntry
 
 
 def _compressed(contents: bytes) -> bytes:
@@ -120,6 +129,7 @@ class PersistentDatasetStore:
                     imported_at timestamptz NOT NULL DEFAULT now(),
                     imported_by text NOT NULL,
                     source_name text NOT NULL,
+                    content_hash text,
                     cleaned_rows integer NOT NULL,
                     appended_rows integer NOT NULL,
                     updated_rows integer NOT NULL DEFAULT 0,
@@ -137,6 +147,15 @@ class PersistentDatasetStore:
             cursor.execute("""
                 ALTER TABLE lma_private.import_log
                 ADD COLUMN IF NOT EXISTS updated_rows integer NOT NULL DEFAULT 0
+            """)
+            cursor.execute("""
+                ALTER TABLE lma_private.import_log
+                ADD COLUMN IF NOT EXISTS content_hash text
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS import_log_content_hash_idx
+                ON lma_private.import_log (content_hash)
+                WHERE content_hash IS NOT NULL
             """)
 
     def status(self) -> DatasetStatus | None:
@@ -193,8 +212,9 @@ class PersistentDatasetStore:
 
         with self.connect() as connection, connection.cursor() as cursor:
             cursor.execute("""
-                SELECT log.dataset_version, log.imported_at, log.imported_by,
-                       log.source_name, outputs.cleaned_csv, outputs.analysis_csv
+                SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
+                       log.source_name, log.content_hash,
+                       outputs.cleaned_csv, outputs.analysis_csv
                 FROM lma_private.import_log AS log
                 JOIN lma_private.import_outputs AS outputs
                   ON outputs.dataset_version = log.dataset_version
@@ -204,15 +224,102 @@ class PersistentDatasetStore:
             rows = cursor.fetchall()
         return [
             ImportHistoryEntry(
+                record_id=record_id,
                 dataset_version=version,
                 imported_at=imported_at,
                 imported_by=imported_by,
                 source_name=source_name,
+                content_hash=content_hash,
                 cleaned_csv=_uncompressed(cleaned),
                 analysis_csv=_uncompressed(analysis),
             )
-            for version, imported_at, imported_by, source_name, cleaned, analysis in rows
+            for record_id, version, imported_at, imported_by, source_name,
+                content_hash, cleaned, analysis in rows
         ]
+
+    @staticmethod
+    def _duplicate_history_entries(
+        history: list[ImportHistoryEntry],
+    ) -> list[DuplicateImportHistoryEntry]:
+        """Group exact uploads, with a cleaned-output fallback for legacy rows."""
+
+        groups: dict[str, list[ImportHistoryEntry]] = {}
+        for entry in history:
+            fingerprint = entry.content_hash or (
+                "legacy:" + hashlib.sha256(entry.cleaned_csv).hexdigest()
+            )
+            groups.setdefault(fingerprint, []).append(entry)
+
+        duplicates = []
+        for entries in groups.values():
+            if len(entries) < 2:
+                continue
+            keeper = max(entries, key=lambda item: (item.imported_at, item.record_id))
+            duplicates.extend(
+                DuplicateImportHistoryEntry(duplicate=entry, keeper=keeper)
+                for entry in entries
+                if entry.record_id != keeper.record_id
+            )
+        return sorted(
+            duplicates,
+            key=lambda item: (
+                item.duplicate.imported_at,
+                item.duplicate.record_id,
+            ),
+            reverse=True,
+        )
+
+    def duplicate_import_history(self) -> list[DuplicateImportHistoryEntry]:
+        """Preview removable history records without changing stored data."""
+
+        return self._duplicate_history_entries(self.import_history())
+
+    def remove_duplicate_import_history(self, preview_ids) -> int:
+        """Delete only previewed rows that are still duplicates at confirmation."""
+
+        requested = {int(record_id) for record_id in preview_ids if int(record_id) > 0}
+        if not requested:
+            return 0
+
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+            cursor.execute("""
+                SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
+                       log.source_name, log.content_hash,
+                       outputs.cleaned_csv, outputs.analysis_csv
+                FROM lma_private.import_log AS log
+                JOIN lma_private.import_outputs AS outputs
+                  ON outputs.dataset_version = log.dataset_version
+                ORDER BY log.imported_at DESC, log.id DESC
+                LIMIT %s
+            """, (BACKUP_RETENTION,))
+            history = [
+                ImportHistoryEntry(
+                    record_id=record_id,
+                    dataset_version=version,
+                    imported_at=imported_at,
+                    imported_by=imported_by,
+                    source_name=source_name,
+                    content_hash=content_hash,
+                    cleaned_csv=_uncompressed(cleaned),
+                    analysis_csv=_uncompressed(analysis),
+                )
+                for record_id, version, imported_at, imported_by, source_name,
+                    content_hash, cleaned, analysis in cursor.fetchall()
+            ]
+            eligible = {
+                item.duplicate.record_id
+                for item in self._duplicate_history_entries(history)
+            }
+            to_delete = sorted(requested & eligible)
+            if not to_delete:
+                return 0
+            cursor.execute("""
+                DELETE FROM lma_private.import_log
+                WHERE id = ANY(%s)
+                RETURNING id
+            """, (to_delete,))
+            return len(cursor.fetchall())
 
     def import_report(
         self,
@@ -264,13 +371,14 @@ class PersistentDatasetStore:
             ))
             cursor.execute("""
                 INSERT INTO lma_private.import_log (
-                    dataset_version, imported_by, source_name, cleaned_rows,
+                    dataset_version, imported_by, source_name, content_hash, cleaned_rows,
                     appended_rows, updated_rows, skipped_duplicate_rows, new_customers
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 next_version,
                 actor,
                 source_name,
+                hashlib.sha256(source_contents).hexdigest(),
                 result.cleaned_rows,
                 result.appended_rows,
                 result.updated_rows,
