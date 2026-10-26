@@ -132,6 +132,7 @@ class StorageTest(unittest.TestCase):
                     _compressed(b"cleaned"),
                     _compressed(b"analysis"),
                     _compressed(b"master-at-version-28"),
+                    _compressed(b"new-leads-at-version-28"),
                 )]
 
         class Connection:
@@ -151,6 +152,9 @@ class StorageTest(unittest.TestCase):
         history = store.import_history()
 
         self.assertEqual(history[0].master_csv, b"master-at-version-28")
+        self.assertEqual(
+            history[0].new_leads_csv, b"new-leads-at-version-28"
+        )
         self.assertIn("dataset_backups", statements[0][0])
         self.assertIn("dataset_state", statements[0][0])
 
