@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from datetime import datetime
@@ -22,11 +23,16 @@ from servicetitan_reports.pipeline import (  # noqa: E402
     read_and_clean_csv_bytes,
     weekly_opportunity_ytd,
 )
-from servicetitan_reports.storage import PersistentDatasetStore  # noqa: E402
+from servicetitan_reports import storage as storage_module  # noqa: E402
 from servicetitan_reports.zip_maps import (  # noqa: E402
     publish_zip_summaries,
     zip_code_summaries,
 )
+
+# Streamlit can rerun this file while retaining an older imported module.
+if "master_csv" not in storage_module.ImportHistoryEntry.__dataclass_fields__:
+    storage_module = importlib.reload(storage_module)
+PersistentDatasetStore = storage_module.PersistentDatasetStore
 
 
 SETTINGS = load_settings(ROOT / "config" / "settings.json")
@@ -450,10 +456,11 @@ try:
                     f"{entry.imported_by}"
                 )
                 master_download, cleaned, analysis = st.columns(3)
-                if entry.master_csv is not None:
+                master_snapshot = getattr(entry, "master_csv", None)
+                if master_snapshot is not None:
                     master_download.download_button(
                         "Download master from this upload",
-                        entry.master_csv,
+                        master_snapshot,
                         f"lma_master_after_{source_stem}.csv",
                         "text/csv",
                         key=f"history-master-{entry.dataset_version}",
