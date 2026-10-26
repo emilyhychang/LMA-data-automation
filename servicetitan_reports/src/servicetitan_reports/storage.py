@@ -39,6 +39,7 @@ class ImportHistoryEntry:
     content_hash: str | None
     cleaned_csv: bytes
     analysis_csv: bytes
+    master_csv: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -214,10 +215,20 @@ class PersistentDatasetStore:
             cursor.execute("""
                 SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
                        log.source_name, log.content_hash,
-                       outputs.cleaned_csv, outputs.analysis_csv
+                       outputs.cleaned_csv, outputs.analysis_csv,
+                       COALESCE(
+                           backup.master_csv,
+                           CASE
+                               WHEN state.version = log.dataset_version
+                               THEN state.master_csv
+                           END
+                       ) AS master_csv
                 FROM lma_private.import_log AS log
                 JOIN lma_private.import_outputs AS outputs
                   ON outputs.dataset_version = log.dataset_version
+                LEFT JOIN lma_private.dataset_backups AS backup
+                  ON backup.version = log.dataset_version
+                CROSS JOIN lma_private.dataset_state AS state
                 ORDER BY log.imported_at DESC, log.id DESC
                 LIMIT %s
             """, (limit,))
@@ -232,9 +243,10 @@ class PersistentDatasetStore:
                 content_hash=content_hash,
                 cleaned_csv=_uncompressed(cleaned),
                 analysis_csv=_uncompressed(analysis),
+                master_csv=_uncompressed(master) if master is not None else None,
             )
             for record_id, version, imported_at, imported_by, source_name,
-                content_hash, cleaned, analysis in rows
+                content_hash, cleaned, analysis, master in rows
         ]
 
     @staticmethod
