@@ -181,13 +181,28 @@ class PipelineTest(unittest.TestCase):
         )
 
         self.assertEqual(set(comparisons), {"HVAC", "Plumbing"})
-        self.assertEqual(comparisons["HVAC"][0]["Records"], 2)
+        self.assertEqual(comparisons["HVAC"][0]["Records"], 3)
         self.assertEqual(comparisons["Plumbing"][0]["Records"], 2)
         self.assertEqual(comparisons["HVAC"][0]["New Customers"], 1)
-        self.assertEqual(comparisons["HVAC"][0]["Unique Customers"], 2)
+        self.assertEqual(comparisons["HVAC"][0]["Unique Customers"], 3)
         self.assertEqual(comparisons["Plumbing"][0]["Unique Customers"], 2)
-        self.assertEqual(comparisons["HVAC"][0]["Revenue"], "150")
+        self.assertEqual(comparisons["HVAC"][0]["Revenue"], "250")
         self.assertEqual(comparisons["Plumbing"][0]["Revenue"], "300")
+
+    def test_overlapping_comparison_windows_include_all_matching_jobs(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        rows = [
+            {"Customer ID": str(i), "Created Date": day,
+             "Invoice Business Unit": "HVAC Service", "Total": "100"}
+            for i, day in enumerate([
+                "2022-06-01", "2023-06-01", "2024-06-01", "2026-06-01"
+            ])
+        ]
+        comparisons = category_period_comparisons(
+            rows, date(2023, 1, 1), date(2026, 10, 4), settings
+        )["HVAC"]
+        self.assertEqual([row["Records"] for row in comparisons], [3, 1, 3])
+        self.assertEqual([row["Revenue"] for row in comparisons], ["300", "100", "300"])
 
     def test_existing_job_group_is_replaced_by_latest_snapshot(self):
         settings = load_settings(PROJECT / "config/settings.json")
@@ -410,7 +425,7 @@ class PipelineTest(unittest.TestCase):
         chart, years = weekly_opportunity_ytd(rows, "Plumbing", settings)
 
         self.assertEqual(years, (2025, 2026))
-        self.assertEqual(len(chart), 52)
+        self.assertEqual(len(chart), 53)
         self.assertEqual(chart[1], {"Week": 2, "2025": 1, "2026": 2})
         self.assertEqual(sum(row["2025"] for row in chart), 2)
         self.assertIsNone(chart[-1]["2026"])

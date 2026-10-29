@@ -24,6 +24,7 @@ from servicetitan_reports.pipeline import (  # noqa: E402
     weekly_opportunity_ytd,
 )
 from servicetitan_reports import storage as storage_module  # noqa: E402
+from servicetitan_reports.startup import open_dataset_store, StorageStartupError  # noqa: E402
 from servicetitan_reports.zip_maps import (  # noqa: E402
     publish_zip_summaries,
     zip_code_summaries,
@@ -35,6 +36,7 @@ if (
     "master_csv" not in history_fields
     or "new_leads_csv" not in history_fields
     or not hasattr(storage_module.PersistentDatasetStore, "history_snapshots")
+    or not hasattr(storage_module.PersistentDatasetStore, "startup_status")
 ):
     storage_module = importlib.reload(storage_module)
 PersistentDatasetStore = storage_module.PersistentDatasetStore
@@ -142,10 +144,10 @@ if not database_url:
 
 try:
     store = PersistentDatasetStore(database_url, SETTINGS)
-    store.ensure_schema()
-    dataset_status = store.status()
-except Exception:
-    st.error("Persistent storage could not be opened. Check the database configuration.")
+    dataset_status = open_dataset_store(store, allow_schema_setup=is_admin)
+except StorageStartupError as error:
+    st.error(str(error))
+    st.button("Retry database connection")
     st.stop()
 
 st.title("ServiceTitan File Cleaner")
@@ -193,10 +195,19 @@ st.caption(
 )
 
 raw_upload = st.file_uploader("New ServiceTitan export", type=["csv"], key="raw_upload")
+with st.expander("Historical imports and corrections"):
+    allow_historical = st.checkbox("Allow a historical import spanning more than 14 days")
+    allow_correction = st.checkbox(
+        "Intentionally reapply a previous file or replace complete job groups",
+        help="Only enable after checking the export contains every job for each customer/date/business-unit/job-type group. Missing rows in replaced groups will be removed; the previous master is backed up.",
+    )
 if st.button("Clean and save report", type="primary", disabled=raw_upload is None):
     try:
         with st.spinner("Cleaning the report and updating both shared datasets…"):
-            result = store.import_report(raw_upload.getvalue(), raw_upload.name, email)
+            result = store.import_report(
+                raw_upload.getvalue(), raw_upload.name, email,
+                allow_historical=allow_historical, allow_correction=allow_correction,
+            )
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem
         try:
@@ -235,15 +246,21 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
 
 result = st.session_state.get("import_result")
 if result:
+    st.caption(f"Saved report: {st.session_state['raw_stem']} · {result.period_start:%Y-%m-%d} to {result.period_end:%Y-%m-%d}")
     first, second, third, fourth, fifth = st.columns(5)
     first.metric("Valid records", f"{result.cleaned_rows:,}")
     second.metric("Added to master", f"{result.appended_rows:,}")
     third.metric("Updated records", f"{getattr(result, 'updated_rows', 0):,}")
     fourth.metric("Unchanged records", f"{result.skipped_duplicate_rows:,}")
     fifth.metric("New customers", f"{result.new_customers:,}")
+    st.caption("Added, updated and unchanged count incoming rows. Exact matches are unchanged; remaining rows are matched within each job group.")
+    if getattr(result, "removed_rows", 0):
+        st.warning(f"{result.removed_rows:,} prior rows were removed by the confirmed group replacement. The previous master is retained in history/backups.")
 
     raw_stem = st.session_state["raw_stem"]
-    st.subheader("Import downloads")
+
+st.subheader("Import downloads")
+if result:
     st.download_button(
         "Download cleaned export", result.cleaned_csv,
         f"{raw_stem}_cleaned.csv", "text/csv"
@@ -263,9 +280,21 @@ try:
 except Exception:
     st.warning("The latest shared datasets could not be prepared.")
 
+if master is not None and leads is not None and current_status is not None:
+    left, right = st.columns(2)
+    left.download_button("Download Master", master, "lma_master.csv", "text/csv")
+    right.download_button("Download New Leads Master", leads, "lma_new_leads_only.csv", "text/csv")
+    st.caption(f"Current dataset version: {current_status.version:,}")
+else:
+    st.warning("The latest shared datasets are unavailable for download.")
+
 if result and master_rows:
     st.subheader("Period comparisons")
-    st.caption("HVAC and Plumbing results for the imported reporting period.")
+    st.caption(
+        "Jobs and revenue are counted in their own category. Customers using both "
+        "services appear in both unique-customer totals; new customers are assigned "
+        "to one category using their earliest qualifying job in the period."
+    )
     fresh_comparisons = category_period_comparisons(
         master_rows, result.period_start, result.period_end, SETTINGS
     )
@@ -362,7 +391,7 @@ if master_rows:
     st.subheader("Weekly opportunities — YTD")
     st.caption(
         "Count of nonblank Opportunity values for each customer's first master "
-        "record, matching the new-leads Excel pivot without historical gaps."
+        "record. Weeks and year labels use the ISO week calendar, including week 53."
     )
     available_statuses = sorted({
         row["Job Status"] for row in derived_lead_rows if row.get("Job Status")
@@ -379,12 +408,19 @@ if master_rows:
         )
         st.write(f"**{category}**")
         if years and chart_rows:
-            st.line_chart(
+            st.vega_lite_chart(
                 chart_rows,
-                x="Week",
-                y=[str(years[0]), str(years[1])],
-                x_label="Week",
-                y_label="Opportunities",
+                {
+                    "transform": [{"fold": [str(years[0]), str(years[1])], "as": ["Year", "Opportunities"]}],
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [0, 54], "nice": False}, "axis": {"title": "ISO week"}},
+                        "y": {"field": "Opportunities", "type": "quantitative"},
+                        "color": {"field": "Year", "type": "nominal"},
+                        "tooltip": [{"field": "Week"}, {"field": "Year"}, {"field": "Opportunities"}],
+                    },
+                },
+                width="stretch",
             )
         else:
             st.info(f"No {category} opportunity history is available yet.")
@@ -394,13 +430,25 @@ def render_file_history(history):
     """Refresh only file history on interaction; reuse already loaded downloads."""
 
     def remove_entry(entry):
+        if not is_admin:
+            return
         try:
-            store.remove_import_history_entry(entry)
+            removed = store.remove_import_history_entry(entry)
         except Exception:
             st.session_state["history_delete_error"] = "The run could not be deleted. Try again."
             return
+        if not removed:
+            st.session_state["history_delete_error"] = (
+                "The run was already removed or changed. Refresh the page and try again."
+            )
+            return
         history[:] = [item for item in history if item.record_id != entry.record_id]
         st.session_state.pop("history_duplicate_preview", None)
+        loaded_version = st.session_state.get(
+            "history_loaded_snapshots", (None, None, None)
+        )[0]
+        if loaded_version == entry.dataset_version:
+            st.session_state.pop("history_loaded_snapshots", None)
 
     error = st.session_state.pop("history_delete_error", None)
     if error:
@@ -408,15 +456,15 @@ def render_file_history(history):
     try:
         if history:
             st.subheader("Generated file history")
-            st.caption("The 25 most recent sets of generated files are retained.")
-            if st.button("Remove Duplicates", key="preview-history-duplicates"):
+            st.caption("All retained reports are listed. Deleting a listing leaves master data, generated files and backups intact. Files removed by older retention rules cannot be recreated here.")
+            if is_admin and st.button("Remove Duplicates", key="preview-history-duplicates"):
                 st.session_state["history_duplicate_preview"] = (
                     store.duplicate_import_history()
                 )
                 st.session_state["confirm_history_duplicate_removal"] = False
 
             duplicate_preview = st.session_state.get("history_duplicate_preview")
-            if duplicate_preview is not None:
+            if is_admin and duplicate_preview is not None:
                 if not duplicate_preview:
                     st.info("No duplicate upload-history records were found.")
                 else:
@@ -452,19 +500,17 @@ def render_file_history(history):
                         disabled=not confirmed,
                         key="confirm-history-duplicate-removal",
                     ):
-                        removed = store.remove_duplicate_import_history(
+                        removed_ids = store.remove_duplicate_import_history(
                             item.duplicate.record_id for item in duplicate_preview
                         )
-                        removed_ids = {
-                            item.duplicate.record_id for item in duplicate_preview
-                        }
                         history[:] = [
                             entry for entry in history
                             if entry.record_id not in removed_ids
                         ]
+                        st.session_state.pop("history_loaded_snapshots", None)
                         st.session_state.pop("history_duplicate_preview", None)
                         st.success(
-                            f"Removed {removed} duplicate upload-history record(s)."
+                            f"Removed {len(removed_ids)} duplicate upload-history record(s)."
                         )
 
             for entry in history:
@@ -517,20 +563,29 @@ def render_file_history(history):
                     else:
                         if loaded_version == entry.dataset_version:
                             leads_download.caption("New leads snapshot is no longer retained.")
-                    cleaned.download_button(
-                        "Download cleaned export",
-                        entry.cleaned_csv,
-                        f"{source_stem}_cleaned.csv",
-                        "text/csv",
-                        key=f"history-cleaned-{entry.dataset_version}",
-                    )
-                    analysis.download_button(
-                        "Download analysis",
-                        entry.analysis_csv,
-                        f"{source_stem}_analysis.csv",
-                        "text/csv",
-                        key=f"history-analysis-{entry.dataset_version}",
-                    )
+                    if entry.cleaned_csv is not None:
+                        cleaned.download_button(
+                            "Download cleaned export",
+                            entry.cleaned_csv,
+                            f"{source_stem}_cleaned.csv",
+                            "text/csv",
+                            key=f"history-cleaned-{entry.record_id}",
+                        )
+                    else:
+                        cleaned.caption("Cleaned export is no longer available.")
+                    if entry.analysis_csv is not None:
+                        analysis.download_button(
+                            "Download analysis",
+                            entry.analysis_csv,
+                            f"{source_stem}_analysis.csv",
+                            "text/csv",
+                            key=f"history-analysis-{entry.record_id}",
+                        )
+                    else:
+                        analysis.caption("Analysis is no longer available.")
+        else:
+            st.subheader("Generated file history")
+            st.info("No saved reports are listed yet.")
     except Exception:
         st.warning("Generated file history could not be loaded.")
 
@@ -539,14 +594,3 @@ try:
     render_file_history(store.import_history(include_snapshots=False))
 except Exception:
     st.warning("Generated file history could not be loaded.")
-
-if master is not None and leads is not None and current_status is not None:
-    st.subheader("Latest shared datasets")
-    left, right = st.columns(2)
-    left.download_button("Download Master", master, "lma_master.csv", "text/csv")
-    right.download_button(
-        "Download New Leads Master", leads, "lma_new_leads_only.csv", "text/csv"
-    )
-    st.caption(f"Current dataset version: {current_status.version:,}")
-else:
-    st.warning("The latest shared datasets are unavailable for download.")

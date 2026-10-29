@@ -15,11 +15,11 @@ from .pipeline import (
     read_and_clean_csv_bytes,
     row_snapshot,
     run_uploaded_import,
+    validate_upload,
 )
 
 
 LOCK_KEY = 4_812_291
-BACKUP_RETENTION = 25
 
 
 @dataclass(frozen=True)
@@ -37,8 +37,8 @@ class ImportHistoryEntry:
     imported_by: str
     source_name: str
     content_hash: str | None
-    cleaned_csv: bytes
-    analysis_csv: bytes
+    cleaned_csv: bytes | None
+    analysis_csv: bytes | None
     master_csv: bytes | None = None
     new_leads_csv: bytes | None = None
 
@@ -100,8 +100,48 @@ class PersistentDatasetStore:
     def connect(self):
         return self._connect(self.database_url)
 
+    def startup_status(self) -> DatasetStatus | None:
+        """Check the schema and current version without executing migrations.
+
+        Probe every column used by this app so older installations can still be
+        upgraded deliberately, rather than running DDL on every page rerun.
+        No master CSVs are transferred by these zero-row checks.
+        """
+
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '15s'")
+            cursor.execute("SET LOCAL lock_timeout = '3s'")
+            cursor.execute("""
+                SELECT singleton, version, master_csv, new_leads_csv,
+                       updated_at, updated_by
+                FROM lma_private.dataset_state LIMIT 0
+            """)
+            cursor.execute("""
+                SELECT id, version, master_csv, new_leads_csv, created_at,
+                       created_by, source_name
+                FROM lma_private.dataset_backups LIMIT 0
+            """)
+            cursor.execute("""
+                SELECT id, dataset_version, imported_at, imported_by, source_name,
+                       content_hash, cleaned_rows, appended_rows, updated_rows,
+                       skipped_duplicate_rows, new_customers
+                FROM lma_private.import_log LIMIT 0
+            """)
+            cursor.execute("""
+                SELECT dataset_version, cleaned_csv, analysis_csv
+                FROM lma_private.import_outputs LIMIT 0
+            """)
+            cursor.execute("""
+                SELECT version, updated_at, updated_by
+                FROM lma_private.dataset_state WHERE singleton = true
+            """)
+            row = cursor.fetchone()
+        return DatasetStatus(*row) if row else None
+
     def ensure_schema(self) -> None:
         with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL lock_timeout = '3s'")
+            cursor.execute("SET LOCAL statement_timeout = '30s'")
             cursor.execute("CREATE SCHEMA IF NOT EXISTS lma_private")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS lma_private.dataset_state (
@@ -209,8 +249,8 @@ class PersistentDatasetStore:
             DatasetStatus(version, updated_at, updated_by),
         )
 
-    def import_history(self, limit: int = BACKUP_RETENTION, *, include_snapshots: bool = True) -> list[ImportHistoryEntry]:
-        """Return recent generated downloads, newest first."""
+    def import_history(self, limit: int | None = None, *, include_snapshots: bool = True) -> list[ImportHistoryEntry]:
+        """Return all retained history by default, including unavailable old outputs."""
 
         with self.connect() as connection, connection.cursor() as cursor:
             if include_snapshots:
@@ -233,7 +273,7 @@ class PersistentDatasetStore:
                                END
                            ) AS new_leads_csv
                     FROM lma_private.import_log AS log
-                    JOIN lma_private.import_outputs AS outputs
+                    LEFT JOIN lma_private.import_outputs AS outputs
                       ON outputs.dataset_version = log.dataset_version
                     LEFT JOIN lma_private.dataset_backups AS backup
                       ON backup.version = log.dataset_version
@@ -247,7 +287,7 @@ class PersistentDatasetStore:
                            log.source_name, log.content_hash,
                            outputs.cleaned_csv, outputs.analysis_csv, NULL, NULL
                     FROM lma_private.import_log AS log
-                    JOIN lma_private.import_outputs AS outputs
+                    LEFT JOIN lma_private.import_outputs AS outputs
                       ON outputs.dataset_version = log.dataset_version
                     ORDER BY log.imported_at DESC, log.id DESC
                     LIMIT %s
@@ -261,8 +301,8 @@ class PersistentDatasetStore:
                 imported_by=imported_by,
                 source_name=source_name,
                 content_hash=content_hash,
-                cleaned_csv=_uncompressed(cleaned),
-                analysis_csv=_uncompressed(analysis),
+                cleaned_csv=_uncompressed(cleaned) if cleaned is not None else None,
+                analysis_csv=_uncompressed(analysis) if analysis is not None else None,
                 master_csv=_uncompressed(master) if master is not None else None,
                 new_leads_csv=(
                     _uncompressed(new_leads) if new_leads is not None else None
@@ -297,6 +337,8 @@ class PersistentDatasetStore:
 
         groups: dict[str, list[ImportHistoryEntry]] = {}
         for entry in history:
+            if not entry.content_hash and entry.cleaned_csv is None:
+                continue
             fingerprint = entry.content_hash or (
                 "legacy:" + hashlib.sha256(entry.cleaned_csv).hexdigest()
             )
@@ -324,14 +366,14 @@ class PersistentDatasetStore:
     def duplicate_import_history(self) -> list[DuplicateImportHistoryEntry]:
         """Preview removable history records without changing stored data."""
 
-        return self._duplicate_history_entries(self.import_history())
+        return self._duplicate_history_entries(self.import_history(include_snapshots=False))
 
-    def remove_duplicate_import_history(self, preview_ids) -> int:
+    def remove_duplicate_import_history(self, preview_ids) -> set[int]:
         """Delete only previewed rows that are still duplicates at confirmation."""
 
         requested = {int(record_id) for record_id in preview_ids if int(record_id) > 0}
         if not requested:
-            return 0
+            return set()
 
         with self.connect() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
@@ -340,11 +382,10 @@ class PersistentDatasetStore:
                        log.source_name, log.content_hash,
                        outputs.cleaned_csv, outputs.analysis_csv
                 FROM lma_private.import_log AS log
-                JOIN lma_private.import_outputs AS outputs
+                LEFT JOIN lma_private.import_outputs AS outputs
                   ON outputs.dataset_version = log.dataset_version
                 ORDER BY log.imported_at DESC, log.id DESC
-                LIMIT %s
-            """, (BACKUP_RETENTION,))
+            """)
             history = [
                 ImportHistoryEntry(
                     record_id=record_id,
@@ -353,8 +394,8 @@ class PersistentDatasetStore:
                     imported_by=imported_by,
                     source_name=source_name,
                     content_hash=content_hash,
-                    cleaned_csv=_uncompressed(cleaned),
-                    analysis_csv=_uncompressed(analysis),
+                    cleaned_csv=_uncompressed(cleaned) if cleaned is not None else None,
+                    analysis_csv=_uncompressed(analysis) if analysis is not None else None,
                 )
                 for record_id, version, imported_at, imported_by, source_name,
                     content_hash, cleaned, analysis in cursor.fetchall()
@@ -365,13 +406,13 @@ class PersistentDatasetStore:
             }
             to_delete = sorted(requested & eligible)
             if not to_delete:
-                return 0
+                return set()
             cursor.execute("""
                 DELETE FROM lma_private.import_log
                 WHERE id = ANY(%s)
                 RETURNING id
             """, (to_delete,))
-            return len(cursor.fetchall())
+            return {row[0] for row in cursor.fetchall()}
 
     def remove_import_history_entry(self, entry: ImportHistoryEntry) -> bool:
         """Remove one identified run from history, leaving datasets and backups intact."""
@@ -390,11 +431,27 @@ class PersistentDatasetStore:
         source_contents: bytes,
         source_name: str,
         actor: str,
+        *,
+        allow_historical: bool = False,
+        allow_correction: bool = False,
     ) -> UploadedImportResult:
         """Serialize imports, back up both datasets, and commit them together."""
 
+        cleaned_rows = read_and_clean_csv_bytes(source_contents, self.settings, "New ServiceTitan export")
+        validate_upload(cleaned_rows, self.settings, allow_historical=allow_historical)
+        content_hash = hashlib.sha256(source_contents).hexdigest()
         with self.connect() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+            # Generated outputs survive history-list deletion. Check those too so
+            # hiding a listing does not allow an old upload to overwrite corrections.
+            cursor.execute("""
+                SELECT 1 FROM lma_private.import_log WHERE content_hash = %s
+                UNION ALL
+                SELECT 1 FROM lma_private.import_outputs WHERE cleaned_csv = %s
+                LIMIT 1
+            """, (content_hash, _compressed(csv_bytes(cleaned_rows, self.settings["master_columns"]))))
+            if cursor.fetchone() and not allow_correction:
+                raise ValueError("This exact file was already saved. Use its history downloads, or enable correction to intentionally reapply it.")
             cursor.execute("""
                 SELECT version, master_csv, new_leads_csv
                 FROM lma_private.dataset_state
@@ -411,7 +468,10 @@ class PersistentDatasetStore:
                 source_contents=source_contents,
                 master_contents=master,
                 settings=self.settings,
+                allow_group_replacement=allow_correction,
             )
+            if result.appended_rows == 0 and result.updated_rows == 0 and result.removed_rows == 0:
+                raise ValueError("All uploaded records already match the master. No new version or backup was created.")
             next_version = version + 1
 
             cursor.execute("""
@@ -442,7 +502,7 @@ class PersistentDatasetStore:
                 next_version,
                 actor,
                 source_name,
-                hashlib.sha256(source_contents).hexdigest(),
+                content_hash,
                 result.cleaned_rows,
                 result.appended_rows,
                 result.updated_rows,
@@ -458,22 +518,4 @@ class PersistentDatasetStore:
                 _compressed(result.cleaned_csv),
                 _compressed(result.analysis_csv),
             ))
-            cursor.execute("""
-                DELETE FROM lma_private.dataset_backups
-                WHERE id NOT IN (
-                    SELECT id
-                    FROM lma_private.dataset_backups
-                    ORDER BY id DESC
-                    LIMIT %s
-                )
-            """, (BACKUP_RETENTION,))
-            cursor.execute("""
-                DELETE FROM lma_private.import_outputs
-                WHERE dataset_version NOT IN (
-                    SELECT dataset_version
-                    FROM lma_private.import_log
-                    ORDER BY id DESC
-                    LIMIT %s
-                )
-            """, (BACKUP_RETENTION,))
             return result

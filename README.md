@@ -8,8 +8,9 @@ ServiceTitan export, and the app updates both saved datasets together.
 
 - The active master and new-leads-only CSVs are compressed and stored together
   in PostgreSQL.
-- Every successful import keeps the prior pair as a backup; the newest 25
-  backups are retained.
+- Every successful import keeps the prior pair as a backup. Backups and generated
+  reports are retained without the old 25-import cutoff. Monitor database storage
+  as history grows; previously expired files are not restored automatically.
 - An import log records the user, source filename, timestamp, and row counts.
 - A database transaction and advisory lock prevent simultaneous imports from
   overwriting one another.
@@ -73,6 +74,31 @@ users see only one upload box for the newest ServiceTitan export.
 2. Upload the newest ServiceTitan CSV.
 3. Select **Clean and save report**.
 4. Download the cleaned export or period comparison if needed.
+
+Uploads reject invalid dates/revenue, future creation dates, and ranges longer
+than 14 days unless **Allow a historical import** is enabled. Exact repeated
+uploads and uploads that make no changes do not create another version or backup.
+For a deliberate correction, use the correction option under **Historical imports
+and corrections**. A repeated file can be reapplied only if it changes the master.
+
+Added/updated/unchanged counts describe incoming rows: exact row matches are
+unchanged, unmatched rows paired within an existing job group are updated, and
+excess incoming rows are added. Confirmed replacements also report prior rows
+removed. The existing master has no stable Job ID: multiple jobs can share its
+customer/date/business-unit/job-type key. Changed multirow groups require explicit
+confirmation that the upload contains the complete group. Identical new rows also
+require confirmation; they are not automatically deleted as presumed duplicates.
+
+Weekly opportunity graphs retain nonblank Opportunity counting, use ISO week-years
+including week 53, and have a fixed 0–54 horizontal axis with no zoom/pan selection.
+Both current master downloads appear in **Import downloads**, even before uploading.
+
+All retained history entries are shown, including entries whose old generated
+files are unavailable. Only administrators can remove entries or duplicate
+listings. These actions leave master data, backups and generated files intact;
+they do not reverse an import. History interactions run in a Streamlit fragment
+so they do not recompute the full analysis. Duplicate confirmation rechecks
+eligibility and updates the display only for successfully deleted listings.
 
 The newest master and new-leads-only datasets remain available for download,
 but users no longer need to upload them for every run.

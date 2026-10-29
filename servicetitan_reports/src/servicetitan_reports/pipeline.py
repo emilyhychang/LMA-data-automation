@@ -59,6 +59,7 @@ class UploadedImportResult:
     zip_year: int | None
     zip_revenue_rows: list[dict[str, str | int | float]]
     zip_new_lead_rows: list[dict[str, str | int | float]]
+    removed_rows: int = 0
 
 
 @dataclass(frozen=True)
@@ -360,6 +361,61 @@ def infer_period(
     return min(valid_dates), max(valid_dates)
 
 
+def validate_upload(rows, settings, *, allow_historical=False, today=None):
+    """Reject invalid dates and accidental full-history uploads before saving."""
+
+    today = today or date.today()
+    dates = []
+    for index, row in enumerate(rows, start=1):
+        created = parse_date(row.get("Created Date", ""), settings["date_formats"])
+        if created is None:
+            raise ValueError(f"Valid record {index} has an invalid Created Date.")
+        if created > today:
+            raise ValueError(f"Valid record {index} has a future Created Date ({created}).")
+        completion = row.get("Completion Date", "")
+        if completion and parse_date(completion, settings["date_formats"]) is None:
+            raise ValueError(f"Valid record {index} has an invalid Completion Date.")
+        try:
+            amount = Decimal(row.get("Total") or "0")
+            if not amount.is_finite():
+                raise InvalidOperation
+        except InvalidOperation:
+            raise ValueError(f"Valid record {index} has an invalid revenue amount.") from None
+        dates.append(created)
+    start, end = min(dates), max(dates)
+    if (end - start).days >= 14 and not allow_historical:
+        raise ValueError(
+            f"The upload spans {start} to {end}, longer than 14 days. "
+            "Check the export dates, or enable historical import if this is intentional."
+        )
+
+
+def validate_group_replacements(master_rows, incoming_rows, settings):
+    """Require explicit consent when the legacy key cannot identify individual jobs."""
+
+    incoming = defaultdict(list)
+    existing = defaultdict(list)
+    for row in incoming_rows:
+        incoming[row_identity(row, settings)].append(row)
+    for row in master_rows:
+        key = row_identity(row, settings)
+        if key in incoming:
+            existing[key].append(row)
+    for key, replacement in incoming.items():
+        previous = existing[key]
+        if not previous and len({row_snapshot(row, settings) for row in replacement}) < len(replacement):
+            raise ValueError("The upload contains identical job rows. Verify these are separate jobs, then enable the correction option to preserve them intentionally.")
+        if len(previous) > 1 or len(replacement) > 1:
+            before = Counter(row_snapshot(row, settings) for row in previous)
+            after = Counter(row_snapshot(row, settings) for row in replacement)
+            if previous and before != after:
+                raise ValueError(
+                    "Multiple jobs share the same customer, date, business unit and job type. "
+                    "Verify the export contains every job for those groups, then enable "
+                    "the correction option to replace those groups."
+                )
+
+
 def comparison_periods(
     start: date,
     end: date,
@@ -484,14 +540,12 @@ def merge_master_rows(
         existing_rows = existing_groups.get(identity)
         if not existing_rows:
             appended_rows += len(replacement_rows)
-        elif Counter(
-            row_snapshot(row, settings) for row in existing_rows
-        ) == Counter(
-            row_snapshot(row, settings) for row in replacement_rows
-        ):
-            skipped_rows += len(replacement_rows)
         else:
-            updated_rows += len(replacement_rows)
+            existing_counts = Counter(row_snapshot(row, settings) for row in existing_rows)
+            incoming_counts = Counter(row_snapshot(row, settings) for row in replacement_rows)
+            unchanged = sum((existing_counts & incoming_counts).values())
+            skipped_rows += unchanged
+            updated_rows += min(len(existing_rows), len(replacement_rows)) - unchanged
         merged_rows.extend(replacement_rows)
 
     new_customer_rows = [
@@ -551,7 +605,7 @@ def category_period_comparisons(
     settings: dict[str, Any],
     first_seen_rows: list[dict[str, str]] | None = None,
 ) -> dict[str, list[dict[str, str | int]]]:
-    """Build internally consistent, mutually exclusive category comparisons."""
+    """Count all category jobs; assign only new customers exclusively per period."""
 
     categories = ("HVAC", "Plumbing")
     comparisons: dict[str, list[dict[str, str | int]]] = {
@@ -576,7 +630,6 @@ def category_period_comparisons(
         for index, (_, period_start, period_end) in enumerate(periods):
             if period_start <= day <= period_end:
                 rows_by_period[index].append(row)
-                break
 
     category_map = invoice_category_mapping(settings)
     for (label, period_start, period_end), period_rows in zip(
@@ -606,8 +659,7 @@ def category_period_comparisons(
             }
             category_rows = [
                 row for row in period_rows
-                if row.get("Customer ID") in assigned_customers
-                and invoice_category(row, settings, category_map) == category
+                if invoice_category(row, settings, category_map) == category
             ]
             if history_start is None or history_start >= period_start:
                 new_customers: int | str = "Insufficient history"
@@ -688,25 +740,23 @@ def weekly_opportunity_ytd(
     if not dated_rows:
         return [], None
 
-    current_year = max(day.year for _, day in dated_rows)
+    current_year = max(day.isocalendar().year for _, day in dated_rows)
     previous_year = current_year - 1
     latest_current_day = max(
-        day for _, day in dated_rows if day.year == current_year
+        day for _, day in dated_rows if day.isocalendar().year == current_year
     )
     last_week = latest_current_day.isocalendar().week
     counts = {
         current_year: {week: 0 for week in range(1, last_week + 1)},
-        previous_year: {week: 0 for week in range(1, 53)},
+        previous_year: {week: 0 for week in range(1, 54)},
     }
     category_map = invoice_category_mapping(settings)
 
     for row, day in dated_rows:
-        if day.year not in counts:
+        week_year, week, _ = day.isocalendar()
+        if week_year not in counts:
             continue
-        week = day.isocalendar().week
-        if day.year == current_year and week > last_week:
-            continue
-        if week > 52:
+        if week_year == current_year and week > last_week:
             continue
         if invoice_category(row, settings, category_map).casefold() != category.casefold():
             continue
@@ -716,7 +766,7 @@ def weekly_opportunity_ytd(
             row.get("Job Status", "")
         ) not in job_statuses:
             continue
-        counts[day.year][week] += 1
+        counts[week_year][week] += 1
 
     chart_rows = [
         {
@@ -726,7 +776,7 @@ def weekly_opportunity_ytd(
                 counts[current_year][week] if week <= last_week else None
             ),
         }
-        for week in range(1, 53)
+        for week in range(1, 54)
     ]
     return chart_rows, (previous_year, current_year)
 
@@ -847,6 +897,8 @@ def run_uploaded_import(
     settings: dict[str, Any],
     period_start: date | None = None,
     period_end: date | None = None,
+    *,
+    allow_group_replacement: bool = False,
 ) -> UploadedImportResult:
     """Process an uploaded report against the stored master in memory."""
 
@@ -855,6 +907,8 @@ def run_uploaded_import(
     master_rows = read_and_clean_csv_bytes(
         master_contents, settings, "Master dataset", allow_empty=True
     )
+    if not allow_group_replacement:
+        validate_group_replacements(master_rows, cleaned_rows, settings)
     processed = process_import_rows(
         cleaned_rows, master_rows, settings, period_start, period_end
     )
@@ -874,4 +928,5 @@ def run_uploaded_import(
         zip_year=processed.zip_year,
         zip_revenue_rows=processed.zip_revenue_rows,
         zip_new_lead_rows=processed.zip_new_lead_rows,
+        removed_rows=(len(master_rows) + processed.appended_rows - len(processed.master_rows)),
     )

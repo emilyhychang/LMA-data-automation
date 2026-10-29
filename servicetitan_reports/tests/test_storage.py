@@ -114,8 +114,8 @@ class StorageTest(unittest.TestCase):
         )
         store.ensure_schema()
 
-        self.assertEqual(len(statements), 8)
-        self.assertTrue(all("lma_private" in statement for statement in statements))
+        self.assertEqual(len(statements), 10)
+        self.assertTrue(all("lma_private" in statement for statement in statements[2:]))
         self.assertTrue(any("content_hash" in statement for statement in statements))
 
     def test_duplicate_preview_keeps_latest_success_and_supports_legacy_rows(self):
@@ -236,7 +236,7 @@ class StorageTest(unittest.TestCase):
         )
         removed = store.remove_duplicate_import_history([1, 3, 999])
 
-        self.assertEqual(removed, 1)
+        self.assertEqual(removed, {1})
         delete_statements = [
             (statement, parameters)
             for statement, parameters in statements
