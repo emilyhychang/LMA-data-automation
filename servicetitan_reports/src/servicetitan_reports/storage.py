@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Callable
+from types import SimpleNamespace
 
 from .pipeline import (
     UploadedImportResult,
@@ -16,10 +18,23 @@ from .pipeline import (
     row_snapshot,
     run_uploaded_import,
     validate_upload,
+    infer_period,
+    category_period_comparisons,
+    analysis_csv_bytes,
+    job_status_analysis,
 )
 
 
 LOCK_KEY = 4_812_291
+MAP_TRACKING_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS lma_private.map_refresh_state (
+        singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+        attempt_version bigint NOT NULL,
+        success_version bigint,
+        refreshed_at timestamptz,
+        error text
+    )
+"""
 
 
 @dataclass(frozen=True)
@@ -41,6 +56,9 @@ class ImportHistoryEntry:
     analysis_csv: bytes | None
     master_csv: bytes | None = None
     new_leads_csv: bytes | None = None
+    outputs_loaded: bool = True
+    has_cleaned: bool = False
+    has_analysis: bool = False
 
 
 @dataclass(frozen=True)
@@ -143,6 +161,7 @@ class PersistentDatasetStore:
             cursor.execute("SET LOCAL lock_timeout = '3s'")
             cursor.execute("SET LOCAL statement_timeout = '30s'")
             cursor.execute("CREATE SCHEMA IF NOT EXISTS lma_private")
+            cursor.execute(MAP_TRACKING_SCHEMA)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS lma_private.dataset_state (
                     singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
@@ -329,6 +348,147 @@ class PersistentDatasetStore:
             return None, None
         return _uncompressed(row[0]), _uncompressed(row[1])
 
+    def history_listing(self):
+        """List all reports without transferring any generated-file blobs."""
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
+                       log.source_name, log.content_hash,
+                       outputs.cleaned_csv IS NOT NULL, outputs.analysis_csv IS NOT NULL
+                FROM lma_private.import_log log
+                LEFT JOIN lma_private.import_outputs outputs ON outputs.dataset_version = log.dataset_version
+                ORDER BY log.imported_at DESC, log.id DESC
+            """)
+            return [ImportHistoryEntry(*row[:6], None, None, outputs_loaded=False,
+                                       has_cleaned=row[6], has_analysis=row[7]) for row in cursor.fetchall()]
+
+    def history_outputs(self, record_id):
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT outputs.cleaned_csv, outputs.analysis_csv
+                FROM lma_private.import_log log
+                LEFT JOIN lma_private.import_outputs outputs ON outputs.dataset_version = log.dataset_version
+                WHERE log.id = %s
+            """, (record_id,))
+            row = cursor.fetchone()
+        if row is None:
+            raise ValueError("This report is no longer listed.")
+        return tuple(_uncompressed(value) if value is not None else None for value in row)
+
+    def saved_reports(self):
+        """Load report selector metadata without downloading generated files."""
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, dataset_version, source_name, imported_at
+                FROM lma_private.import_log ORDER BY imported_at DESC, id DESC
+            """)
+            return cursor.fetchall()
+
+    def load_saved_report(self, record_id: int, *, cached_snapshot=None):
+        """Restore original metrics; regenerate analysis from the saved master only."""
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT log.dataset_version, log.source_name, log.cleaned_rows,
+                       log.appended_rows, log.updated_rows, log.skipped_duplicate_rows,
+                       log.new_customers, outputs.cleaned_csv, outputs.analysis_csv,
+                       CASE WHEN log.dataset_version = %s THEN NULL ELSE
+                           COALESCE(backup.master_csv,
+                           CASE WHEN state.version = log.dataset_version THEN state.master_csv END) END
+                FROM lma_private.import_log log
+                LEFT JOIN lma_private.import_outputs outputs ON outputs.dataset_version = log.dataset_version
+                LEFT JOIN lma_private.dataset_backups backup ON backup.version = log.dataset_version
+                CROSS JOIN lma_private.dataset_state state
+                WHERE log.id = %s
+            """, (cached_snapshot[0] if cached_snapshot else None, record_id))
+            row = cursor.fetchone()
+        if row is None:
+            raise ValueError("This report is no longer listed. Select another report.")
+        version, name, valid, added, updated, unchanged, customers, cleaned, original, master = row
+        cleaned = _uncompressed(cleaned) if cleaned is not None else None
+        original = _uncompressed(original) if original is not None else None
+        master = _uncompressed(master) if master is not None else None
+        cached_rows = None
+        if cached_snapshot and cached_snapshot[0] == version:
+            _, master, cached_rows = cached_snapshot
+        start = end = None
+        comparisons = None
+        corrected = None
+        if cleaned is not None:
+            incoming = read_and_clean_csv_bytes(cleaned, self.settings, "Saved report")
+            start, end = infer_period(incoming, self.settings)
+            if master is not None:
+                master_rows = cached_rows if cached_rows is not None else read_and_clean_csv_bytes(master, self.settings, "Saved master")
+                comparisons = category_period_comparisons(master_rows, start, end, self.settings)
+                statuses, columns = job_status_analysis(incoming)
+                corrected = analysis_csv_bytes(comparisons, statuses, columns)
+        return SimpleNamespace(
+            dataset_version=version, source_name=name, cleaned_rows=valid,
+            appended_rows=added, updated_rows=updated, skipped_duplicate_rows=unchanged,
+            new_customers=customers, cleaned_csv=cleaned, original_analysis_csv=original,
+            analysis_csv=corrected, master_csv=master, period_start=start, period_end=end,
+            category_comparisons=comparisons, removed_rows=0,
+        )
+
+    def map_status(self, *, allow_setup=False):
+        import psycopg
+        try:
+            with self.connect() as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT attempt_version, success_version, refreshed_at, error FROM lma_private.map_refresh_state WHERE singleton = true")
+                row = cursor.fetchone()
+        except psycopg.errors.UndefinedTable:
+            if not allow_setup:
+                return {"setup_required": True}
+            # Optional map tracking must never block core dataset startup.
+            with self.connect() as connection, connection.cursor() as cursor:
+                cursor.execute("SET LOCAL lock_timeout = '3s'")
+                cursor.execute("SET LOCAL statement_timeout = '15s'")
+                cursor.execute(MAP_TRACKING_SCHEMA)
+            return self.map_status()
+        return dict(zip(("attempt_version", "success_version", "refreshed_at", "error"), row)) if row else None
+
+    def refresh_maps(self, publish, *, prepared=None):
+        """Publish the latest committed version while holding the import lock.
+
+        No older import result can overwrite a newer version. Google failures
+        are caught inside the transaction so the failure status is committed.
+        The two separate spreadsheets cannot be updated atomically together.
+        """
+        from .zip_maps import zip_code_summaries, map_error_message
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL lock_timeout = '5s'")
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+            cursor.execute("SELECT attempt_version FROM lma_private.map_refresh_state LIMIT 0")
+            cursor.execute("SELECT version, CASE WHEN version = %s THEN NULL ELSE master_csv END FROM lma_private.dataset_state WHERE singleton = true",
+                           (getattr(prepared, 'dataset_version', None),))
+            version, compressed_master = cursor.fetchone()
+            error = refreshed_at = None
+            try:
+                if prepared is not None and prepared.dataset_version == version:
+                    payload = prepared
+                else:
+                    rows = read_and_clean_csv_bytes(_uncompressed(compressed_master), self.settings, "Master")
+                    year, revenue, leads = zip_code_summaries(rows, first_seen_customer_rows(rows, self.settings), self.settings)
+                    payload = SimpleNamespace(zip_year=year, zip_revenue_rows=revenue, zip_new_lead_rows=leads)
+                refreshed_at = publish(payload)
+                if not refreshed_at:
+                    raise ValueError("Missing map configuration")
+            except Exception as exception:
+                error = map_error_message(exception)
+                status_code = getattr(getattr(exception, "response", None), "status_code", None)
+                logging.getLogger(__name__).warning("Map refresh failed: %s (HTTP %s)", type(exception).__name__, status_code if isinstance(status_code, int) else "unavailable")
+            cursor.execute("""
+                INSERT INTO lma_private.map_refresh_state
+                    (singleton, attempt_version, success_version, refreshed_at, error)
+                VALUES (true, %s, %s, %s, %s)
+                ON CONFLICT (singleton) DO UPDATE SET
+                    attempt_version = EXCLUDED.attempt_version,
+                    success_version = COALESCE(EXCLUDED.success_version, map_refresh_state.success_version),
+                    refreshed_at = COALESCE(EXCLUDED.refreshed_at, map_refresh_state.refreshed_at),
+                    error = EXCLUDED.error
+                RETURNING attempt_version, success_version, refreshed_at, error
+            """, (version, version if error is None else None, refreshed_at, error))
+            return dict(zip(("attempt_version", "success_version", "refreshed_at", "error"), cursor.fetchone()))
+
     @staticmethod
     def _duplicate_history_entries(
         history: list[ImportHistoryEntry],
@@ -469,6 +629,7 @@ class PersistentDatasetStore:
                 master_contents=master,
                 settings=self.settings,
                 allow_group_replacement=allow_correction,
+                cleaned_rows=cleaned_rows,
             )
             if result.appended_rows == 0 and result.updated_rows == 0 and result.removed_rows == 0:
                 raise ValueError("All uploaded records already match the master. No new version or backup was created.")
@@ -518,4 +679,4 @@ class PersistentDatasetStore:
                 _compressed(result.cleaned_csv),
                 _compressed(result.analysis_csv),
             ))
-            return result
+            return replace(result, dataset_version=next_version, source_name=source_name)

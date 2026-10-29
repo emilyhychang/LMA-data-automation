@@ -60,6 +60,10 @@ class UploadedImportResult:
     zip_revenue_rows: list[dict[str, str | int | float]]
     zip_new_lead_rows: list[dict[str, str | int | float]]
     removed_rows: int = 0
+    dataset_version: int | None = None
+    source_name: str = ""
+    category_comparisons: dict | None = None
+    new_lead_rows: list | None = None
 
 
 @dataclass(frozen=True)
@@ -899,11 +903,13 @@ def run_uploaded_import(
     period_end: date | None = None,
     *,
     allow_group_replacement: bool = False,
+    cleaned_rows: list[dict[str, str]] | None = None,
 ) -> UploadedImportResult:
     """Process an uploaded report against the stored master in memory."""
 
     columns = settings["master_columns"]
-    cleaned_rows = read_and_clean_csv_bytes(source_contents, settings, "New ServiceTitan export")
+    if cleaned_rows is None:
+        cleaned_rows = read_and_clean_csv_bytes(source_contents, settings, "New ServiceTitan export")
     master_rows = read_and_clean_csv_bytes(
         master_contents, settings, "Master dataset", allow_empty=True
     )
@@ -929,4 +935,6 @@ def run_uploaded_import(
         zip_revenue_rows=processed.zip_revenue_rows,
         zip_new_lead_rows=processed.zip_new_lead_rows,
         removed_rows=(len(master_rows) + processed.appended_rows - len(processed.master_rows)),
+        category_comparisons=processed.category_comparisons,
+        new_lead_rows=processed.new_leads_rows,
     )

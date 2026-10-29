@@ -56,6 +56,9 @@ class ZipMapTest(unittest.TestCase):
         class Worksheet:
             def __init__(self):
                 self.calls = []
+                self.id = 0
+                self.row_count = 100
+                self.col_count = 3
 
             def clear(self):
                 self.calls.append(("clear",))
@@ -70,6 +73,15 @@ class ZipMapTest(unittest.TestCase):
             def worksheet(self, name):
                 self._worksheet.calls.append(("worksheet", name))
                 return self._worksheet
+
+            def batch_update(self, body):
+                update = body['requests'][-1]['updateCells']
+                self._worksheet.calls.append(('atomic_update', {
+                    'values': [[next(iter(cell['userEnteredValue'].values()))
+                                for cell in row['values']] for row in update['rows']]
+                }))
+                assert update['range']['endRowIndex'] == 100
+                assert update['fields'] == 'userEnteredValue'
 
         class Client:
             def __init__(self):
@@ -98,6 +110,7 @@ class ZipMapTest(unittest.TestCase):
             ["Zip", "New leads", "Map data generated at"],
             ["92109", 2, "2026-10-19T09:30:00-07:00"],
         ])
+        self.assertFalse(any(call[0] == 'clear' for sheet in client.books.values() for call in sheet.calls))
 
 
 if __name__ == "__main__":

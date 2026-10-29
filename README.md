@@ -105,6 +105,67 @@ but users no longer need to upload them for every run.
 
 ## Private deployment
 
+### Workflow performance
+
+The dashboard reuses one dataset version within the signed-in browser session.
+Every full rerun checks the current database version; a changed version reloads
+the master and invalidates derived ZIP/chart data. Account, database configuration,
+or reporting-settings changes discard session caches. No customer data is stored
+in a process-wide shared cache. Temporary full-master rows are released after
+the render; only CSV downloads, derived lead rows and summaries remain cached.
+
+Successful imports reuse their calculated comparisons, ZIP summaries and new-lead
+rows. Map publishing reuses that result only if its version still matches the
+locked database version; otherwise it calculates from the newer committed master.
+The uploaded file is cleaned once rather than again inside processing. Core
+schema checks run once per session, with lightweight version checks thereafter.
+
+Report selectors and history share a metadata-only listing. Historical CSVs and
+master snapshots load only when requested, retaining one set of each in the
+session. Download buttons do not rerun the app. Historical comparisons reuse
+the already-loaded master when versions match, and are not recalculated on
+ordinary widget changes. The chart cache keeps only the current filter selection.
+
+The local 100,000-row synthetic benchmark measured 3.66 seconds for the old
+repeated calculation path and 2.17 seconds for a cold dashboard calculation;
+cached repeats skipped that calculation and additional master downloads. These
+are local computation timings, excluding database/network, Google and browser
+latency; they are not a hosted page-load guarantee.
+
+### Saved reports and map refresh
+
+The Saved report selector defaults to the newest retained listing, including after
+a browser refresh. It restores the original saved import counts and generates
+current analysis from that report's retained master snapshot. Original analysis
+downloads remain separate and unchanged. When an old export or master snapshot
+has expired, the app labels recalculated analysis as unavailable rather than
+substituting today's master.
+
+ZIP tables show the top 20 with lead counts or revenue. Map sources contain all
+valid ZIPs from the latest master year, independent of the selected saved report.
+Imports refresh both sources automatically; **Refresh map sources** retries the
+latest committed master without creating another report or changing master data.
+
+Publishing resolves both spreadsheets first and replaces each sheet's values and
+obsolete tail cells in one batch, without clearing the sheet in a separate request.
+Transient failures receive up to three attempts with network timeouts. The two
+spreadsheets cannot be updated atomically together, so a partial failure is shown
+as a failure requiring retry. The database import lock serializes publication and
+imports to prevent stale report results overwriting a newer published version.
+
+Successful version/time and failures persist in the optional
+`lma_private.map_refresh_state` table. On an existing installation, an administrator's
+first visit creates this table only if it is missing, using bounded timeouts.
+Unavailable map tracking does not stop the core app. Refresh verifies the table
+exists before publishing; the database account needs permission to create it once.
+
+After approved deployment, verify the deployed service-account key, Editor sharing
+on both spreadsheets, and worksheet names. The local read-only check confirmed
+both source sheets are readable but could not confirm editing permission. Hosted
+credentials and Looker data sources/cache settings still require verification.
+Compare Looker's displayed “Map data generated at” time with the saved success
+timestamp; source publication alone does not guarantee the iframe has refreshed.
+
 Keep the GitHub repository private and configure the Streamlit app as private.
 The in-app approved-email check remains the final authorization layer even if
 someone obtains the app URL.

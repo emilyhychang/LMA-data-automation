@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import hashlib
 import json
 import sys
 from datetime import datetime
@@ -25,6 +26,7 @@ from servicetitan_reports.pipeline import (  # noqa: E402
 )
 from servicetitan_reports import storage as storage_module  # noqa: E402
 from servicetitan_reports.startup import open_dataset_store, StorageStartupError  # noqa: E402
+from servicetitan_reports.workflow import latest_dashboard, imported_dashboard, weekly_charts  # noqa: E402
 from servicetitan_reports.zip_maps import (  # noqa: E402
     publish_zip_summaries,
     zip_code_summaries,
@@ -98,18 +100,16 @@ def refresh_zip_map_sources(result) -> str | None:
     return generated_at
 
 
-def render_zip_ranking(rows) -> None:
-    """Render a compact top-20 ZIP list beside a heatmap."""
-
-    zip_codes = [str(row.get("Zip", "")) for row in rows[:20]]
-    if not zip_codes:
+def render_zip_ranking(rows, metric) -> None:
+    """Render the top 20 ZIPs with the values that determine their rank."""
+    if not rows:
         st.info("No ZIP data is available.")
         return
-    st.markdown(
-        '<div class="zip-ranking">'
-        + "".join(f"<div>{zip_code}</div>" for zip_code in zip_codes)
-        + "</div>",
-        unsafe_allow_html=True,
+    st.dataframe(
+        [{"Rank": index, **row} for index, row in enumerate(rows[:20], 1)],
+        hide_index=True, width="stretch",
+        column_config={"Zip": st.column_config.TextColumn("ZIP"),
+                       metric: st.column_config.NumberColumn(metric, format="$%.2f" if metric == "Revenue" else "%d")},
     )
 
 
@@ -142,9 +142,22 @@ if not database_url:
     st.error("Persistent storage is not configured. An administrator must add the database URL.")
     st.stop()
 
+scope = hashlib.sha256((email + database_url + json.dumps(SETTINGS, sort_keys=True) + 'workflow-v1').encode()).hexdigest()
+if st.session_state.get('workflow_scope') not in (None, scope):
+    st.session_state.clear()
+st.session_state['workflow_scope'] = scope
+workflow_cache = st.session_state.setdefault('workflow_cache', {})
+
 try:
     store = PersistentDatasetStore(database_url, SETTINGS)
-    dataset_status = open_dataset_store(store, allow_schema_setup=is_admin)
+    if st.session_state.get('startup_checked'):
+        try:
+            dataset_status = store.status()
+        except Exception:
+            dataset_status = open_dataset_store(store, allow_schema_setup=is_admin)
+    else:
+        dataset_status = open_dataset_store(store, allow_schema_setup=is_admin)
+        st.session_state['startup_checked'] = True
 except StorageStartupError as error:
     st.error(str(error))
     st.button("Retry database connection")
@@ -195,6 +208,15 @@ st.caption(
 )
 
 raw_upload = st.file_uploader("New ServiceTitan export", type=["csv"], key="raw_upload")
+# Initialize optional map tracking only for an administrator; failures must not
+# prevent viewing reports or saving the core datasets.
+try:
+    if not st.session_state.get('map_setup_checked'):
+        map_setup = store.map_status(allow_setup=is_admin)
+        if not map_setup or not map_setup.get('setup_required'):
+            st.session_state['map_setup_checked'] = True
+except Exception:
+    pass
 with st.expander("Historical imports and corrections"):
     allow_historical = st.checkbox("Allow a historical import spanning more than 14 days")
     allow_correction = st.checkbox(
@@ -204,49 +226,80 @@ with st.expander("Historical imports and corrections"):
 if st.button("Clean and save report", type="primary", disabled=raw_upload is None):
     try:
         with st.spinner("Cleaning the report and updating both shared datasets…"):
+            workflow_cache.clear()
+            st.session_state.pop('import_result', None)
+            st.session_state.pop('loaded_report_id', None)
             result = store.import_report(
                 raw_upload.getvalue(), raw_upload.name, email,
                 allow_historical=allow_historical, allow_correction=allow_correction,
             )
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem
+        st.session_state.pop("saved_report_id", None)
+        st.session_state.pop("loaded_report_id", None)
+        imported_status = storage_module.DatasetStatus(result.dataset_version, datetime.now(ZoneInfo('UTC')), email)
+        imported_dashboard(workflow_cache, result, imported_status)
         try:
-            map_refresh_time = refresh_zip_map_sources(result)
-            st.session_state["zip_map_refresh"] = (
-                "refreshed" if map_refresh_time else "not_configured"
-            )
-            if map_refresh_time:
-                st.session_state["zip_map_refresh_at"] = map_refresh_time
+            dataset_status = store.status()
         except Exception:
-            st.session_state["zip_map_refresh"] = "failed"
+            dataset_status = imported_status
+        st.session_state['just_imported_version'] = result.dataset_version
+        try:
+            store.refresh_maps(refresh_zip_map_sources, prepared=result)
+        except Exception:
+            st.warning("The report was saved, but map refresh could not complete. Use Refresh map sources below.")
         st.success(
             "Both shared datasets were saved. A backup of the prior version was retained."
         )
-        if st.session_state["zip_map_refresh"] == "refreshed":
-            refresh_label = datetime.fromisoformat(
-                st.session_state["zip_map_refresh_at"]
-            ).strftime("%B %-d, %Y at %-I:%M:%S %p %Z")
-            st.success(
-                f"The revenue and new-lead map source data was generated {refresh_label}."
-            )
-        elif st.session_state["zip_map_refresh"] == "not_configured":
-            st.warning(
-                "The report was saved, but the map source sheets were not refreshed "
-                "because the deployed app is missing its Google service-account credential."
-            )
-        else:
-            st.warning(
-                "The datasets were saved, but the map data could not be refreshed. "
-                "Check the Google Sheets sharing and service-account settings."
-            )
     except ValueError as error:
         st.error(f"Nothing was saved: {error}")
     except Exception:
         st.error("Nothing was saved. The import could not complete; retry or contact an administrator.")
 
+master = leads = current_status = dashboard = None
+render_rows = None
+try:
+    dashboard, render_rows = latest_dashboard(workflow_cache, store, dataset_status, SETTINGS)
+    master, leads, current_status = dashboard['master'], dashboard['leads'], dashboard['status']
+except Exception:
+    st.warning("The latest shared datasets could not be prepared.")
+
+history = []
+try:
+    history = store.history_listing()
+    reports = [(entry.record_id, entry.dataset_version, entry.source_name, entry.imported_at) for entry in history]
+    if reports:
+        report_labels = {record_id: f"{created:%Y-%m-%d} · {name} · version {version}"
+                         for record_id, version, name, created in reports}
+        if st.session_state.get("saved_report_id") not in report_labels:
+            st.session_state.pop("saved_report_id", None)
+        selected_report = st.selectbox("Saved report", list(report_labels),
+                                       format_func=report_labels.get, key="saved_report_id")
+        if st.session_state.get("loaded_report_id") != selected_report:
+            selected_version = next(version for record_id, version, _, _ in reports if record_id == selected_report)
+            if st.session_state.get('just_imported_version') == selected_version and st.session_state.get('import_result'):
+                restored = st.session_state['import_result']
+            else:
+                st.session_state.pop("import_result", None)
+                snapshot = (current_status.version, master, render_rows) if current_status else None
+                restored = store.load_saved_report(selected_report, cached_snapshot=snapshot)
+            st.session_state["import_result"] = restored
+            st.session_state["raw_stem"] = Path(restored.source_name).stem
+            st.session_state["loaded_report_id"] = selected_report
+            st.session_state.pop('just_imported_version', None)
+except Exception:
+    st.warning("Saved report details could not be loaded. Refresh to try again.")
+
+# Fragment closures retain this script's globals; release temporary full-master
+# rows after report restoration rather than retaining them for the session.
+render_rows = snapshot = None
+
 result = st.session_state.get("import_result")
 if result:
-    st.caption(f"Saved report: {st.session_state['raw_stem']} · {result.period_start:%Y-%m-%d} to {result.period_end:%Y-%m-%d}")
+    period_label = f"{result.period_start:%Y-%m-%d} to {result.period_end:%Y-%m-%d}" if result.period_start else "Original date range unavailable"
+    st.caption(f"Saved report: {st.session_state['raw_stem']} · {period_label}")
+    if hasattr(result, "dataset_version"):
+        st.caption("Metrics are the original saved import counts. Comparisons and recalculated analysis use this report's retained master snapshot, not today's master.")
     first, second, third, fourth, fifth = st.columns(5)
     first.metric("Valid records", f"{result.cleaned_rows:,}")
     second.metric("Added to master", f"{result.appended_rows:,}")
@@ -261,42 +314,37 @@ if result:
 
 st.subheader("Import downloads")
 if result:
-    st.download_button(
-        "Download cleaned export", result.cleaned_csv,
-        f"{raw_stem}_cleaned.csv", "text/csv"
-    )
-    st.download_button(
-        "Download analysis", result.analysis_csv,
-        f"{raw_stem}_analysis.csv", "text/csv"
-    )
-
-master = leads = current_status = None
-master_rows = []
-try:
-    master, leads, current_status = store.downloads()
-    master_rows = read_and_clean_csv_bytes(
-        master, SETTINGS, "Master dataset", allow_empty=True
-    )
-except Exception:
-    st.warning("The latest shared datasets could not be prepared.")
+    if result.cleaned_csv is not None:
+        st.download_button("Download cleaned export", result.cleaned_csv, f"{raw_stem}_cleaned.csv", "text/csv", on_click="ignore")
+    if result.analysis_csv is not None:
+        st.download_button("Download recalculated analysis", result.analysis_csv, f"{raw_stem}_analysis_recalculated.csv", "text/csv", on_click="ignore")
+    if getattr(result, "original_analysis_csv", None) is not None:
+        st.download_button("Download original saved analysis", result.original_analysis_csv, f"{raw_stem}_analysis_original.csv", "text/csv", on_click="ignore")
+    if result.analysis_csv is None:
+        st.info("Recalculated analysis is unavailable because the original export or master snapshot is no longer retained.")
 
 if master is not None and leads is not None and current_status is not None:
     left, right = st.columns(2)
-    left.download_button("Download Master", master, "lma_master.csv", "text/csv")
-    right.download_button("Download New Leads Master", leads, "lma_new_leads_only.csv", "text/csv")
+    left.download_button("Download Master", master, "lma_master.csv", "text/csv", on_click="ignore")
+    right.download_button("Download New Leads Master", leads, "lma_new_leads_only.csv", "text/csv", on_click="ignore")
     st.caption(f"Current dataset version: {current_status.version:,}")
 else:
     st.warning("The latest shared datasets are unavailable for download.")
 
-if result and master_rows:
+fresh_comparisons = getattr(result, 'category_comparisons', None) if result else None
+if result and result.period_start and fresh_comparisons is None and result.master_csv is not None:
+    report_rows = read_and_clean_csv_bytes(result.master_csv, SETTINGS, 'Report master', allow_empty=True)
+    fresh_comparisons = category_period_comparisons(report_rows, result.period_start, result.period_end, SETTINGS)
+    # Reuse the comparison on widget reruns even for an older in-session result.
+    if hasattr(result, '__dict__'):
+        object.__setattr__(result, 'category_comparisons', fresh_comparisons)
+    report_rows = None
+if fresh_comparisons:
     st.subheader("Period comparisons")
     st.caption(
         "Jobs and revenue are counted in their own category. Customers using both "
         "services appear in both unique-customer totals; new customers are assigned "
         "to one category using their earliest qualifying job in the period."
-    )
-    fresh_comparisons = category_period_comparisons(
-        master_rows, result.period_start, result.period_end, SETTINGS
     )
     for category in ("HVAC", "Plumbing"):
         st.write(f"**{category}**")
@@ -322,26 +370,36 @@ if result and master_rows:
             },
         )
 
-derived_lead_rows = first_seen_customer_rows(master_rows, SETTINGS) if master_rows else []
+derived_lead_rows = dashboard['lead_rows'] if dashboard else []
 
-if master_rows:
-    zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
-        master_rows, derived_lead_rows, SETTINGS
-    )
+if dashboard and dashboard['has_rows']:
+    zip_year, zip_revenue_rows, zip_new_lead_rows = dashboard['zip_summary']
     st.subheader(f"Top ZIP codes and heatmaps — {zip_year}")
     st.caption(
-        "Revenue and first-time customers are ranked by ZIP code for the latest year. "
-        "The heatmaps refresh from the two connected Google Sheets."
+        "Tables show the top 20 ZIPs for the latest master year. Maps include all valid ZIPs. "
+        "Selecting an older report does not change these latest-master rankings or map sources."
     )
-    map_refresh_time = st.session_state.get("zip_map_refresh_at")
-    if map_refresh_time:
-        refresh_label = datetime.fromisoformat(map_refresh_time).strftime(
-            "%B %-d, %Y at %-I:%M:%S %p %Z"
-        )
-        st.info(
-            f"Latest map source: {refresh_label}. The maps are current when their "
-            "displayed ‘Map data generated at’ time matches this time."
-        )
+    try:
+        if st.button("Refresh map sources", help="Republish the latest master to Google Sheets without importing or saving the report again."):
+            with st.spinner("Refreshing both map sources…"):
+                store.refresh_maps(refresh_zip_map_sources)
+            st.rerun()
+        map_status = store.map_status()
+        if map_status and map_status.get("setup_required"):
+            st.info("An administrator needs to open the app once to enable map refresh tracking.")
+        elif not map_status:
+            st.info("Map freshness has not been recorded yet. Use Refresh map sources.")
+        elif map_status["error"]:
+            st.warning(map_status["error"])
+        elif current_status and map_status["success_version"] == current_status.version:
+            st.success(f"Both map sources refreshed for dataset version {map_status['success_version']} at {map_status['refreshed_at']}.")
+        else:
+            st.warning("Map sources are behind the latest master. Use Refresh map sources.")
+        if map_status and map_status.get("refreshed_at"):
+            st.caption(f"Last successful refresh: version {map_status['success_version']} · {map_status['refreshed_at']}")
+        st.caption("Looker Studio may cache its display. Check the map's ‘Map data generated at’ time against the successful refresh time. A refresh of one spreadsheet cannot guarantee the other succeeded.")
+    except Exception:
+        st.warning("Map freshness could not be checked or refreshed. Try again; the saved report is unchanged.")
     st.markdown(
         """
         <style>
@@ -368,9 +426,9 @@ if master_rows:
 
     with leads_section:
         st.write("**New leads**")
-        leads_list, leads_map = st.columns([1, 4], gap="small")
+        leads_list, leads_map = st.columns([2, 3], gap="small")
         with leads_list:
-            render_zip_ranking(zip_new_lead_rows)
+            render_zip_ranking(zip_new_lead_rows, "New leads")
         with leads_map:
             if leads_embed_url:
                 components.iframe(leads_embed_url, height=540, scrolling=False)
@@ -379,9 +437,9 @@ if master_rows:
 
     with revenue_section:
         st.write("**Revenue**")
-        revenue_list, revenue_map = st.columns([1, 4], gap="small")
+        revenue_list, revenue_map = st.columns([2, 3], gap="small")
         with revenue_list:
-            render_zip_ranking(zip_revenue_rows)
+            render_zip_ranking(zip_revenue_rows, "Revenue")
         with revenue_map:
             if revenue_embed_url:
                 components.iframe(revenue_embed_url, height=540, scrolling=False)
@@ -402,10 +460,9 @@ if master_rows:
         default=available_statuses,
         help="Select the same statuses used by the Job Status filter in Excel.",
     )
+    charts = weekly_charts(workflow_cache, dashboard, SETTINGS, selected_statuses)
     for category in ("Plumbing", "HVAC"):
-        chart_rows, years = weekly_opportunity_ytd(
-            derived_lead_rows, category, SETTINGS, set(selected_statuses)
-        )
+        chart_rows, years = charts[category]
         st.write(f"**{category}**")
         if years and chart_rows:
             st.vega_lite_chart(
@@ -443,6 +500,7 @@ def render_file_history(history):
             )
             return
         history[:] = [item for item in history if item.record_id != entry.record_id]
+        st.session_state.pop('history_loaded_outputs', None)
         st.session_state.pop("history_duplicate_preview", None)
         loaded_version = st.session_state.get(
             "history_loaded_snapshots", (None, None, None)
@@ -508,6 +566,7 @@ def render_file_history(history):
                             if entry.record_id not in removed_ids
                         ]
                         st.session_state.pop("history_loaded_snapshots", None)
+                        st.session_state.pop('history_loaded_outputs', None)
                         st.session_state.pop("history_duplicate_preview", None)
                         st.success(
                             f"Removed {len(removed_ids)} duplicate upload-history record(s)."
@@ -541,6 +600,18 @@ def render_file_history(history):
                             )
                             loaded_version = entry.dataset_version
                     master_download, leads_download, cleaned, analysis = st.columns(4)
+                    cleaned_bytes, analysis_bytes = entry.cleaned_csv, entry.analysis_csv
+                    outputs_loaded = getattr(entry, 'outputs_loaded', True)
+                    if not outputs_loaded:
+                        loaded_id, files = st.session_state.get('history_loaded_outputs', (None, (None, None)))
+                        if loaded_id != entry.record_id and (entry.has_cleaned or entry.has_analysis):
+                            if st.button('Load report downloads', key=f'load-outputs-{entry.record_id}'):
+                                files = store.history_outputs(entry.record_id)
+                                st.session_state['history_loaded_outputs'] = (entry.record_id, files)
+                                loaded_id = entry.record_id
+                        if loaded_id == entry.record_id:
+                            cleaned_bytes, analysis_bytes = files
+                            outputs_loaded = True
                     if master_snapshot is not None:
                         master_download.download_button(
                             "Download master from this upload",
@@ -548,6 +619,7 @@ def render_file_history(history):
                             f"lma_master_after_{source_stem}.csv",
                             "text/csv",
                             key=f"history-master-{entry.dataset_version}",
+                            on_click="ignore",
                         )
                     else:
                         if loaded_version == entry.dataset_version:
@@ -559,29 +631,32 @@ def render_file_history(history):
                             f"lma_new_leads_after_{source_stem}.csv",
                             "text/csv",
                             key=f"history-new-leads-{entry.dataset_version}",
+                            on_click="ignore",
                         )
                     else:
                         if loaded_version == entry.dataset_version:
                             leads_download.caption("New leads snapshot is no longer retained.")
-                    if entry.cleaned_csv is not None:
+                    if cleaned_bytes is not None:
                         cleaned.download_button(
                             "Download cleaned export",
-                            entry.cleaned_csv,
+                            cleaned_bytes,
                             f"{source_stem}_cleaned.csv",
                             "text/csv",
                             key=f"history-cleaned-{entry.record_id}",
+                            on_click="ignore",
                         )
-                    else:
+                    elif outputs_loaded or not entry.has_cleaned:
                         cleaned.caption("Cleaned export is no longer available.")
-                    if entry.analysis_csv is not None:
+                    if analysis_bytes is not None:
                         analysis.download_button(
                             "Download analysis",
-                            entry.analysis_csv,
+                            analysis_bytes,
                             f"{source_stem}_analysis.csv",
                             "text/csv",
                             key=f"history-analysis-{entry.record_id}",
+                            on_click="ignore",
                         )
-                    else:
+                    elif outputs_loaded or not entry.has_analysis:
                         analysis.caption("Analysis is no longer available.")
         else:
             st.subheader("Generated file history")
@@ -591,6 +666,6 @@ def render_file_history(history):
 
 
 try:
-    render_file_history(store.import_history(include_snapshots=False))
+    render_file_history(history)
 except Exception:
     st.warning("Generated file history could not be loaded.")
