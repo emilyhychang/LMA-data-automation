@@ -17,7 +17,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from servicetitan_reports.pipeline import (  # noqa: E402
     PERIOD_COMPARISON_COLUMNS,
+    analysis_csv_bytes,
     category_period_comparisons,
+    job_status_analysis,
     first_seen_customer_rows,
     load_settings,
     read_and_clean_csv_bytes,
@@ -261,9 +263,40 @@ except Exception:
 
 if result and master_rows:
     st.subheader("Period comparisons")
-    st.caption("HVAC and Plumbing results for the imported reporting period.")
+    st.caption("Select the reporting period to compare against the saved master history.")
+    start_column, end_column = st.columns(2)
+    period_key = f"{st.session_state['raw_stem']}-{result.period_start}-{result.period_end}"
+    comparison_start = start_column.date_input(
+        "Reporting period start", value=result.period_start,
+        key=f"comparison-start-{period_key}",
+    )
+    comparison_end = end_column.date_input(
+        "Reporting period end", value=result.period_end,
+        key=f"comparison-end-{period_key}",
+    )
+    if comparison_end < comparison_start:
+        st.error("Reporting period end must be on or after its start.")
+        st.stop()
+    if (comparison_end - comparison_start).days >= 365:
+        st.info(
+            "This reporting period spans a year or more. If you intended a weekly "
+            "or monthly report, select those dates above. Previous Period is the "
+            "equally long window immediately before the selected start."
+        )
     fresh_comparisons = category_period_comparisons(
-        master_rows, result.period_start, result.period_end, SETTINGS
+        master_rows, comparison_start, comparison_end, SETTINGS
+    )
+    history_start = min(row["Created Date"] for row in master_rows)
+    st.caption(
+        f"Saved history begins {history_start}. New Customers requires history "
+        "before each period's start; earlier customers cannot be verified otherwise."
+    )
+    cleaned_rows = read_and_clean_csv_bytes(result.cleaned_csv, SETTINGS, "Cleaned export")
+    analysis_rows, analysis_columns = job_status_analysis(cleaned_rows)
+    st.download_button(
+        "Download analysis for selected period",
+        analysis_csv_bytes(fresh_comparisons, analysis_rows, analysis_columns),
+        f"{st.session_state['raw_stem']}_selected_period_analysis.csv", "text/csv",
     )
     for category in ("HVAC", "Plumbing"):
         st.write(f"**{category}**")
