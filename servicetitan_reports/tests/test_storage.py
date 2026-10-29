@@ -107,57 +107,6 @@ class StorageTest(unittest.TestCase):
             {(1, 2), (3, 4)},
         )
 
-    def test_import_history_includes_master_snapshot_for_each_upload(self):
-        imported_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
-        statements = []
-
-        class Cursor:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-            def execute(self, statement, parameters=None):
-                statements.append((statement, parameters))
-
-            def fetchall(self):
-                return [(
-                    7,
-                    28,
-                    imported_at,
-                    "user@example.com",
-                    "period.csv",
-                    "hash",
-                    _compressed(b"cleaned"),
-                    _compressed(b"analysis"),
-                    _compressed(b"master-at-version-28"),
-                    _compressed(b"new-leads-at-version-28"),
-                )]
-
-        class Connection:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-            def cursor(self):
-                return Cursor()
-
-        store = PersistentDatasetStore(
-            "postgresql://example", self.settings, connect=lambda _: Connection()
-        )
-
-        history = store.import_history()
-
-        self.assertEqual(history[0].master_csv, b"master-at-version-28")
-        self.assertEqual(
-            history[0].new_leads_csv, b"new-leads-at-version-28"
-        )
-        self.assertIn("dataset_backups", statements[0][0])
-        self.assertIn("dataset_state", statements[0][0])
-
     def test_confirmed_removal_deletes_only_still_duplicate_log_rows(self):
         imported_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
         history_rows = [

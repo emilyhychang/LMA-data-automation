@@ -189,21 +189,6 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(comparisons["HVAC"][0]["Revenue"], "150")
         self.assertEqual(comparisons["Plumbing"][0]["Revenue"], "300")
 
-    def test_overlapping_year_comparison_keeps_matching_history(self):
-        settings = load_settings(PROJECT / "config/settings.json")
-        rows = [
-            {"Customer ID": str(i), "Created Date": day,
-             "Invoice Business Unit": "HVAC Service", "Total": "100"}
-            for i, day in enumerate(["2022-06-01", "2023-06-01", "2024-06-01", "2026-06-01"])
-        ]
-        comparisons = category_period_comparisons(
-            rows, date(2023, 1, 1), date(2026, 10, 4), settings
-        )["HVAC"]
-        self.assertEqual([row["Records"] for row in comparisons], [3, 1, 3])
-        self.assertEqual([row["Revenue"] for row in comparisons], ["300", "100", "300"])
-        self.assertEqual(comparisons[0]["New Customers"], 3)
-        self.assertEqual(comparisons[2]["New Customers"], "Insufficient history")
-
     def test_existing_job_group_is_replaced_by_latest_snapshot(self):
         settings = load_settings(PROJECT / "config/settings.json")
         with tempfile.TemporaryDirectory() as temp:

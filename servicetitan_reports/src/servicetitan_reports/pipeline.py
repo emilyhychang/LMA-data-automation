@@ -551,7 +551,7 @@ def category_period_comparisons(
     settings: dict[str, Any],
     first_seen_rows: list[dict[str, str]] | None = None,
 ) -> dict[str, list[dict[str, str | int]]]:
-    """Compare each date window independently, with exclusive categories per window."""
+    """Build internally consistent, mutually exclusive category comparisons."""
 
     categories = ("HVAC", "Plumbing")
     comparisons: dict[str, list[dict[str, str | int]]] = {
@@ -576,6 +576,7 @@ def category_period_comparisons(
         for index, (_, period_start, period_end) in enumerate(periods):
             if period_start <= day <= period_end:
                 rows_by_period[index].append(row)
+                break
 
     category_map = invoice_category_mapping(settings)
     for (label, period_start, period_end), period_rows in zip(
