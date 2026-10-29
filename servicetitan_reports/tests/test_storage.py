@@ -34,6 +34,32 @@ class StorageTest(unittest.TestCase):
             "Total": "100",
         }
 
+    def test_remove_one_run_only_deletes_the_identified_history_entry(self):
+        statements = []
+
+        class Cursor:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def execute(self, statement, parameters=None):
+                statements.append((statement, parameters))
+            def fetchone(self): return (42,)
+
+        class Connection:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def cursor(self): return Cursor()
+
+        store = PersistentDatasetStore("unused", self.settings, connect=lambda _: Connection())
+        entry = ImportHistoryEntry(
+            42, 28, datetime.now(timezone.utc), "admin", "wrong-master.csv",
+            "hash", b"cleaned", b"analysis",
+        )
+        self.assertTrue(store.remove_import_history_entry(entry))
+        self.assertEqual(statements[1][1], (42, 28, "wrong-master.csv"))
+        self.assertIn("DELETE FROM lma_private.import_log", statements[1][0])
+        self.assertNotIn("dataset_state", statements[1][0])
+        self.assertNotIn("dataset_backups", statements[1][0])
+
     def test_seed_normalizes_and_deduplicates_both_datasets(self):
         master_row = self.record("customer-1", "09/01/2026")
         master = csv_bytes([master_row, master_row], self.settings["master_columns"])
@@ -106,6 +132,57 @@ class StorageTest(unittest.TestCase):
             {(item.duplicate.record_id, item.keeper.record_id) for item in preview},
             {(1, 2), (3, 4)},
         )
+
+    def test_import_history_includes_master_snapshot_for_each_upload(self):
+        imported_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+        statements = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def execute(self, statement, parameters=None):
+                statements.append((statement, parameters))
+
+            def fetchall(self):
+                return [(
+                    7,
+                    28,
+                    imported_at,
+                    "user@example.com",
+                    "period.csv",
+                    "hash",
+                    _compressed(b"cleaned"),
+                    _compressed(b"analysis"),
+                    _compressed(b"master-at-version-28"),
+                    _compressed(b"new-leads-at-version-28"),
+                )]
+
+        class Connection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def cursor(self):
+                return Cursor()
+
+        store = PersistentDatasetStore(
+            "postgresql://example", self.settings, connect=lambda _: Connection()
+        )
+
+        history = store.import_history()
+
+        self.assertEqual(history[0].master_csv, b"master-at-version-28")
+        self.assertEqual(
+            history[0].new_leads_csv, b"new-leads-at-version-28"
+        )
+        self.assertIn("dataset_backups", statements[0][0])
+        self.assertIn("dataset_state", statements[0][0])
 
     def test_confirmed_removal_deletes_only_still_duplicate_log_rows(self):
         imported_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)

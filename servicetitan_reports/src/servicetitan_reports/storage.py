@@ -39,6 +39,8 @@ class ImportHistoryEntry:
     content_hash: str | None
     cleaned_csv: bytes
     analysis_csv: bytes
+    master_csv: bytes | None = None
+    new_leads_csv: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -214,10 +216,27 @@ class PersistentDatasetStore:
             cursor.execute("""
                 SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
                        log.source_name, log.content_hash,
-                       outputs.cleaned_csv, outputs.analysis_csv
+                       outputs.cleaned_csv, outputs.analysis_csv,
+                       COALESCE(
+                           backup.master_csv,
+                           CASE
+                               WHEN state.version = log.dataset_version
+                               THEN state.master_csv
+                           END
+                       ) AS master_csv,
+                       COALESCE(
+                           backup.new_leads_csv,
+                           CASE
+                               WHEN state.version = log.dataset_version
+                               THEN state.new_leads_csv
+                           END
+                       ) AS new_leads_csv
                 FROM lma_private.import_log AS log
                 JOIN lma_private.import_outputs AS outputs
                   ON outputs.dataset_version = log.dataset_version
+                LEFT JOIN lma_private.dataset_backups AS backup
+                  ON backup.version = log.dataset_version
+                CROSS JOIN lma_private.dataset_state AS state
                 ORDER BY log.imported_at DESC, log.id DESC
                 LIMIT %s
             """, (limit,))
@@ -232,9 +251,13 @@ class PersistentDatasetStore:
                 content_hash=content_hash,
                 cleaned_csv=_uncompressed(cleaned),
                 analysis_csv=_uncompressed(analysis),
+                master_csv=_uncompressed(master) if master is not None else None,
+                new_leads_csv=(
+                    _uncompressed(new_leads) if new_leads is not None else None
+                ),
             )
             for record_id, version, imported_at, imported_by, source_name,
-                content_hash, cleaned, analysis in rows
+                content_hash, cleaned, analysis, master, new_leads in rows
         ]
 
     @staticmethod
@@ -320,6 +343,18 @@ class PersistentDatasetStore:
                 RETURNING id
             """, (to_delete,))
             return len(cursor.fetchall())
+
+    def remove_import_history_entry(self, entry: ImportHistoryEntry) -> bool:
+        """Remove one identified run from history, leaving datasets and backups intact."""
+
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+            cursor.execute("""
+                DELETE FROM lma_private.import_log
+                WHERE id = %s AND dataset_version = %s AND source_name = %s
+                RETURNING id
+            """, (entry.record_id, entry.dataset_version, entry.source_name))
+            return cursor.fetchone() is not None
 
     def import_report(
         self,
