@@ -209,37 +209,49 @@ class PersistentDatasetStore:
             DatasetStatus(version, updated_at, updated_by),
         )
 
-    def import_history(self, limit: int = BACKUP_RETENTION) -> list[ImportHistoryEntry]:
+    def import_history(self, limit: int = BACKUP_RETENTION, *, include_snapshots: bool = True) -> list[ImportHistoryEntry]:
         """Return recent generated downloads, newest first."""
 
         with self.connect() as connection, connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
-                       log.source_name, log.content_hash,
-                       outputs.cleaned_csv, outputs.analysis_csv,
-                       COALESCE(
-                           backup.master_csv,
-                           CASE
-                               WHEN state.version = log.dataset_version
-                               THEN state.master_csv
-                           END
-                       ) AS master_csv,
-                       COALESCE(
-                           backup.new_leads_csv,
-                           CASE
-                               WHEN state.version = log.dataset_version
-                               THEN state.new_leads_csv
-                           END
-                       ) AS new_leads_csv
-                FROM lma_private.import_log AS log
-                JOIN lma_private.import_outputs AS outputs
-                  ON outputs.dataset_version = log.dataset_version
-                LEFT JOIN lma_private.dataset_backups AS backup
-                  ON backup.version = log.dataset_version
-                CROSS JOIN lma_private.dataset_state AS state
-                ORDER BY log.imported_at DESC, log.id DESC
-                LIMIT %s
-            """, (limit,))
+            if include_snapshots:
+                cursor.execute("""
+                    SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
+                           log.source_name, log.content_hash,
+                           outputs.cleaned_csv, outputs.analysis_csv,
+                           COALESCE(
+                               backup.master_csv,
+                               CASE
+                                   WHEN state.version = log.dataset_version
+                                   THEN state.master_csv
+                               END
+                           ) AS master_csv,
+                           COALESCE(
+                               backup.new_leads_csv,
+                               CASE
+                                   WHEN state.version = log.dataset_version
+                                   THEN state.new_leads_csv
+                               END
+                           ) AS new_leads_csv
+                    FROM lma_private.import_log AS log
+                    JOIN lma_private.import_outputs AS outputs
+                      ON outputs.dataset_version = log.dataset_version
+                    LEFT JOIN lma_private.dataset_backups AS backup
+                      ON backup.version = log.dataset_version
+                    CROSS JOIN lma_private.dataset_state AS state
+                    ORDER BY log.imported_at DESC, log.id DESC
+                    LIMIT %s
+                """, (limit,))
+            else:
+                cursor.execute("""
+                    SELECT log.id, log.dataset_version, log.imported_at, log.imported_by,
+                           log.source_name, log.content_hash,
+                           outputs.cleaned_csv, outputs.analysis_csv, NULL, NULL
+                    FROM lma_private.import_log AS log
+                    JOIN lma_private.import_outputs AS outputs
+                      ON outputs.dataset_version = log.dataset_version
+                    ORDER BY log.imported_at DESC, log.id DESC
+                    LIMIT %s
+                """, (limit,))
             rows = cursor.fetchall()
         return [
             ImportHistoryEntry(
@@ -259,6 +271,23 @@ class PersistentDatasetStore:
             for record_id, version, imported_at, imported_by, source_name,
                 content_hash, cleaned, analysis, master, new_leads in rows
         ]
+
+    def history_snapshots(self, version: int) -> tuple[bytes | None, bytes | None]:
+        """Load large master snapshots only for the requested history entry."""
+
+        with self.connect() as connection, connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT master_csv, new_leads_csv
+                FROM lma_private.dataset_backups WHERE version = %s
+                UNION ALL
+                SELECT master_csv, new_leads_csv
+                FROM lma_private.dataset_state WHERE version = %s
+                LIMIT 1
+            """, (version, version))
+            row = cursor.fetchone()
+        if row is None:
+            return None, None
+        return _uncompressed(row[0]), _uncompressed(row[1])
 
     @staticmethod
     def _duplicate_history_entries(

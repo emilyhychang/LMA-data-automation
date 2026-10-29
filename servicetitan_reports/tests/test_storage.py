@@ -34,6 +34,18 @@ class StorageTest(unittest.TestCase):
             "Total": "100",
         }
 
+    def test_history_can_skip_large_master_snapshots(self):
+        from unittest.mock import MagicMock
+        connection = MagicMock()
+        cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        store = PersistentDatasetStore("unused", self.settings, connect=lambda _: connection)
+        self.assertEqual(store.import_history(include_snapshots=False), [])
+        query = cursor.execute.call_args.args[0]
+        self.assertNotIn("dataset_backups", query)
+        self.assertNotIn("dataset_state", query)
+        self.assertIn("NULL, NULL", query)
+
     def test_remove_one_run_only_deletes_the_identified_history_entry(self):
         statements = []
 
