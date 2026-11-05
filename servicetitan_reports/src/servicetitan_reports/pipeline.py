@@ -811,7 +811,7 @@ def process_import_rows(
     from .zip_maps import zip_code_summaries
 
     zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
-        final_master, new_leads_rows, settings
+        final_master, new_leads_rows, settings, start, end
     )
     analysis_rows, analysis_columns = job_status_analysis(cleaned_rows)
     return ProcessedImport(

@@ -86,3 +86,27 @@ class WorkflowCacheTest(unittest.TestCase):
         cursor.fetchone.side_effect = [(36, _compressed(self.master)), (36, 36, 'time', None)]
         store.refresh_maps(publish, prepared=result)
         self.assertIsNot(publish.call_args.args[0], result)
+
+    def test_manual_map_refresh_can_publish_selected_historical_report(self):
+        from dataclasses import replace
+        connection = MagicMock()
+        cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        store = PersistentDatasetStore('unused', self.settings, connect=lambda _: connection)
+        result = replace(
+            run_uploaded_import(
+                self.master,
+                csv_bytes([], self.settings['master_columns']),
+                self.settings,
+            ),
+            dataset_version=35,
+        )
+        publish = MagicMock(return_value='2026-11-05T10:00:00-08:00')
+        cursor.fetchone.side_effect = [
+            (36, _compressed(self.master)),
+            (35, 35, 'time', None),
+        ]
+
+        store.refresh_maps(publish, prepared=result, allow_historical=True)
+
+        self.assertIs(publish.call_args.args[0], result)
+        self.assertEqual(cursor.execute.call_args.args[1][:2], (35, 35))

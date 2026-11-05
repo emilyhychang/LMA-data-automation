@@ -5,7 +5,7 @@ from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import streamlit as st
 from streamlit.testing.v1 import AppTest
@@ -137,6 +137,40 @@ class AppWorkflowTest(unittest.TestCase):
         next(button for button in self.at.button if button.label == 'Refresh map sources').click().run()
         refresh.assert_called_once()
         save.assert_not_called()
+
+    def test_selecting_saved_report_automatically_refreshes_its_map_sources(self):
+        self.history.append(self.entry(1))
+        result = self.restored(35, 200)
+        result.zip_year = 2026
+        result.zip_revenue_rows = [{"Zip": "92109", "Revenue": 200.0}]
+        result.zip_new_lead_rows = [{"Zip": "92037", "New leads": 1}]
+        self.stack.enter_context(patch.object(
+            PersistentDatasetStore, "load_saved_report", return_value=result
+        ))
+        refresh = self.stack.enter_context(patch.object(
+            PersistentDatasetStore,
+            "refresh_maps",
+            return_value={
+                "attempt_version": 35,
+                "success_version": 35,
+                "refreshed_at": "2026-11-05T10:00:00-08:00",
+                "error": None,
+            },
+        ))
+
+        self.at.run()
+
+        self.assertFalse(self.at.exception)
+        refresh.assert_called_once_with(
+            ANY,
+            prepared=result,
+            allow_historical=True,
+        )
+        self.assertTrue(any(
+            "Both map sources refreshed for the selected report"
+            in message.value
+            for message in self.at.success
+        ))
 
     def test_master_downloads_exist_before_upload_and_charts_have_fixed_domain(self):
         self.at.run()

@@ -8,10 +8,10 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -114,6 +114,22 @@ def render_zip_ranking(rows, metric) -> None:
         + "</div>",
         unsafe_allow_html=True,
     )
+
+
+def refreshed_embed_url(url: str, report_key: tuple, refreshed_at: object) -> str:
+    """Force a fresh iframe document for one report/map publication."""
+
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["map_report"] = "-".join(str(value) for value in report_key)
+    query["map_refresh"] = str(refreshed_at or "pending")
+    return urlunsplit((
+        parts.scheme,
+        parts.netloc,
+        parts.path,
+        urlencode(query),
+        parts.fragment,
+    ))
 
 
 def require_approved_user() -> tuple[str, bool]:
@@ -403,28 +419,83 @@ if fresh_comparisons:
 derived_lead_rows = dashboard['lead_rows'] if dashboard else []
 
 if dashboard and dashboard['has_rows']:
-    zip_year, zip_revenue_rows, zip_new_lead_rows = dashboard['zip_summary']
-    st.subheader(f"Top ZIP codes and heatmaps — {zip_year}")
-    st.caption(
-        "Tables show the top 20 ZIPs for the latest master year. Maps include all valid ZIPs. "
-        "Selecting an older report does not change these latest-master rankings or map sources."
+    selected_zip_summary = None
+    if result and getattr(result, "period_start", None) and hasattr(result, "zip_revenue_rows"):
+        selected_zip_summary = (
+            getattr(result, "zip_year", result.period_end.year),
+            result.zip_revenue_rows,
+            result.zip_new_lead_rows,
+        )
+    zip_year, zip_revenue_rows, zip_new_lead_rows = selected_zip_summary or dashboard['zip_summary']
+    zip_period_label = (
+        f"{result.period_start:%Y-%m-%d} to {result.period_end:%Y-%m-%d}"
+        if selected_zip_summary else str(zip_year)
     )
+    st.subheader(f"Top ZIP codes and heatmaps — {zip_period_label}")
+    st.caption(
+        "Tables show the top 20 ZIPs for the selected report period. Maps include all valid ZIPs "
+        "from that same period."
+    )
+    selected_map_key = (
+        st.session_state.get("loaded_report_id"),
+        getattr(result, "dataset_version", None) if selected_zip_summary else current_status.version,
+        result.period_start.isoformat() if selected_zip_summary else zip_year,
+        result.period_end.isoformat() if selected_zip_summary else zip_year,
+    )
+    map_status = None
     try:
-        if st.button("Refresh map sources", help="Republish the latest master to Google Sheets without importing or saving the report again."):
-            with st.spinner("Refreshing both map sources…"):
-                store.refresh_maps(refresh_zip_map_sources)
-            st.rerun()
         map_status = store.map_status()
+        session_match = st.session_state.get("map_success_key") == selected_map_key
+        # The database's legacy refresh record identifies only a dataset
+        # version, not a report date range. Refresh each selected report once
+        # per browser session even when two reports share one dataset version.
+        needs_refresh = bool(selected_zip_summary and not session_match)
+
+        # A saved-report selection changes the ZIP lists immediately. Publish
+        # that same period once in this browser session so the maps cannot be
+        # left showing a different report until the user notices the warning.
+        if (
+            needs_refresh
+            and not (map_status and map_status.get("setup_required"))
+            and st.session_state.get("map_auto_attempt_key") != selected_map_key
+        ):
+            st.session_state["map_auto_attempt_key"] = selected_map_key
+            with st.spinner("Refreshing both map sources…"):
+                map_status = store.refresh_maps(
+                    refresh_zip_map_sources,
+                    prepared=result,
+                    allow_historical=True,
+                )
+            if map_status and not map_status.get("error"):
+                st.session_state["map_success_key"] = selected_map_key
+                needs_refresh = False
+
+        if st.button(
+            "Refresh map sources",
+            help="Republish the selected report period to Google Sheets without importing or saving the report again.",
+            type="primary" if needs_refresh else "secondary",
+        ):
+            with st.spinner("Refreshing both map sources…"):
+                map_status = store.refresh_maps(
+                    refresh_zip_map_sources,
+                    prepared=result if selected_zip_summary else None,
+                    allow_historical=bool(selected_zip_summary),
+                )
+            if map_status and not map_status.get("error"):
+                st.session_state["map_success_key"] = selected_map_key
+                st.session_state["map_auto_attempt_key"] = selected_map_key
+                needs_refresh = False
+
         if map_status and map_status.get("setup_required"):
             st.info("An administrator needs to open the app once to enable map refresh tracking.")
         elif not map_status:
             st.info("Map freshness has not been recorded yet. Use Refresh map sources.")
         elif map_status["error"]:
             st.warning(map_status["error"])
-        elif current_status and map_status["success_version"] == current_status.version:
-            st.success(f"Both map sources refreshed for dataset version {map_status['success_version']} at {map_status['refreshed_at']}.")
+        elif not needs_refresh:
+            st.success(f"Both map sources refreshed for the selected report at {map_status['refreshed_at']}.")
         else:
-            st.warning("Map sources are behind the latest master. Use Refresh map sources.")
+            st.warning("Map sources do not match the selected report. Use Refresh map sources.")
         if map_status and map_status.get("refreshed_at"):
             st.caption(f"Last successful refresh: version {map_status['success_version']} · {map_status['refreshed_at']}")
         st.caption("Looker Studio may cache its display. Check the map's ‘Map data generated at’ time against the successful refresh time. A refresh of one spreadsheet cannot guarantee the other succeeded.")
@@ -453,6 +524,15 @@ if dashboard and dashboard['has_rows']:
     leads_embed_url = str(
         looker_settings.get("new_leads_embed_url", NEW_LEADS_HEATMAP_URL)
     ).strip()
+    embed_refresh_time = map_status.get("refreshed_at") if map_status else None
+    if leads_embed_url:
+        leads_embed_url = refreshed_embed_url(
+            leads_embed_url, selected_map_key, embed_refresh_time
+        )
+    if revenue_embed_url:
+        revenue_embed_url = refreshed_embed_url(
+            revenue_embed_url, selected_map_key, embed_refresh_time
+        )
 
     with leads_section:
         st.write("**New leads**")
@@ -461,7 +541,11 @@ if dashboard and dashboard['has_rows']:
             render_zip_ranking(zip_new_lead_rows, "New leads")
         with leads_map:
             if leads_embed_url:
-                components.iframe(leads_embed_url, height=430, scrolling=False)
+                st.iframe(
+                    leads_embed_url,
+                    height=430,
+                    alt=f"New leads ZIP heatmap for {zip_period_label}",
+                )
             else:
                 st.info("The new-lead heatmap embed URL is not configured yet.")
 
@@ -472,7 +556,11 @@ if dashboard and dashboard['has_rows']:
             render_zip_ranking(zip_revenue_rows, "Revenue")
         with revenue_map:
             if revenue_embed_url:
-                components.iframe(revenue_embed_url, height=430, scrolling=False)
+                st.iframe(
+                    revenue_embed_url,
+                    height=430,
+                    alt=f"Revenue ZIP heatmap for {zip_period_label}",
+                )
             else:
                 st.info("The revenue heatmap embed URL is not configured yet.")
 

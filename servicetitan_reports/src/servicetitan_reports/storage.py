@@ -413,18 +413,34 @@ class PersistentDatasetStore:
         start = end = None
         comparisons = None
         corrected = None
+        zip_year = None
+        zip_revenue_rows = []
+        zip_new_lead_rows = []
         if cleaned is not None:
             incoming = read_and_clean_csv_bytes(cleaned, self.settings, "Saved report")
             start, end = infer_period(incoming, self.settings)
             if master is not None:
                 master_rows = cached_rows if cached_rows is not None else read_and_clean_csv_bytes(master, self.settings, "Saved master")
-            comparisons = category_period_comparisons(master_rows, start, end, self.settings)
+                lead_rows = first_seen_customer_rows(master_rows, self.settings)
+                comparisons = category_period_comparisons(
+                    master_rows, start, end, self.settings, lead_rows
+                )
+                from .zip_maps import zip_code_summaries
+                zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
+                    master_rows, lead_rows, self.settings, start, end
+                )
+                analysis_rows, analysis_columns = job_status_analysis(incoming)
+                corrected = analysis_csv_bytes(
+                    comparisons, analysis_rows, analysis_columns
+                )
         return SimpleNamespace(
             dataset_version=version, source_name=name, cleaned_rows=valid,
             appended_rows=added, updated_rows=updated, skipped_duplicate_rows=unchanged,
             new_customers=customers, cleaned_csv=cleaned, original_analysis_csv=original,
-            analysis_csv=None, master_csv=master, period_start=start, period_end=end,
-            category_comparisons=comparisons, removed_rows=0,
+            analysis_csv=corrected, master_csv=master, period_start=start, period_end=end,
+            category_comparisons=comparisons, removed_rows=0, zip_year=zip_year,
+            zip_revenue_rows=zip_revenue_rows,
+            zip_new_lead_rows=zip_new_lead_rows,
         )
 
     def map_status(self, *, allow_setup=False):
@@ -444,12 +460,13 @@ class PersistentDatasetStore:
             return self.map_status()
         return dict(zip(("attempt_version", "success_version", "refreshed_at", "error"), row)) if row else None
 
-    def refresh_maps(self, publish, *, prepared=None):
-        """Publish the latest committed version while holding the import lock.
+    def refresh_maps(self, publish, *, prepared=None, allow_historical=False):
+        """Publish a committed report's map rows while holding the import lock.
 
-        No older import result can overwrite a newer version. Google failures
-        are caught inside the transaction so the failure status is committed.
-        The two separate spreadsheets cannot be updated atomically together.
+        Automatic refreshes cannot let an older import result overwrite a newer
+        version. A manual refresh may explicitly publish a selected historical
+        report. Google failures are caught inside the transaction so the failure
+        status is committed. The two spreadsheets cannot be updated atomically.
         """
         from .zip_maps import zip_code_summaries, map_error_message
         with self.connect() as connection, connection.cursor() as cursor:
@@ -459,10 +476,21 @@ class PersistentDatasetStore:
             cursor.execute("SELECT version, CASE WHEN version = %s THEN NULL ELSE master_csv END FROM lma_private.dataset_state WHERE singleton = true",
                            (getattr(prepared, 'dataset_version', None),))
             version, compressed_master = cursor.fetchone()
+            target_version = version
             error = refreshed_at = None
             try:
-                if prepared is not None and prepared.dataset_version == version:
+                prepared_is_usable = (
+                    prepared is not None
+                    and getattr(prepared, "zip_revenue_rows", None) is not None
+                    and getattr(prepared, "zip_new_lead_rows", None) is not None
+                    and (
+                        getattr(prepared, "dataset_version", None) == version
+                        or allow_historical
+                    )
+                )
+                if prepared_is_usable:
                     payload = prepared
+                    target_version = getattr(prepared, "dataset_version", None) or version
                 else:
                     rows = read_and_clean_csv_bytes(_uncompressed(compressed_master), self.settings, "Master")
                     year, revenue, leads = zip_code_summaries(rows, first_seen_customer_rows(rows, self.settings), self.settings)
@@ -484,7 +512,7 @@ class PersistentDatasetStore:
                     refreshed_at = COALESCE(EXCLUDED.refreshed_at, map_refresh_state.refreshed_at),
                     error = EXCLUDED.error
                 RETURNING attempt_version, success_version, refreshed_at, error
-            """, (version, version if error is None else None, refreshed_at, error))
+            """, (target_version, target_version if error is None else None, refreshed_at, error))
             return dict(zip(("attempt_version", "success_version", "refreshed_at", "error"), cursor.fetchone()))
 
     @staticmethod

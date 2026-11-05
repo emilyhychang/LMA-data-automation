@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import time
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Mapping, Sequence, Union
@@ -40,18 +41,36 @@ def zip_code_summaries(
     master_rows: Sequence[dict[str, str]],
     new_lead_rows: Sequence[dict[str, str]],
     settings: Mapping[str, Any],
+    period_start: date | None = None,
+    period_end: date | None = None,
 ) -> tuple[int | None, list[ZipMetricRow], list[ZipMetricRow]]:
-    """Aggregate latest-year revenue and new leads for every valid ZIP code."""
+    """Aggregate revenue and new leads for every valid ZIP in one date range.
+
+    When no range is supplied, retain the dashboard's historical latest-year
+    behavior. Saved reports pass their exact reporting period so adjacent
+    reports cannot display or publish the same cumulative master-year map.
+    """
 
     year = _latest_year(master_rows, settings)
     if year is None:
         return None, [], []
+    if (period_start is None) != (period_end is None):
+        raise ValueError("Both period_start and period_end are required.")
+    if period_start is not None and period_end is not None and period_end < period_start:
+        raise ValueError("Period end must be on or after period start.")
+
+    def in_scope(day: date | None) -> bool:
+        if day is None:
+            return False
+        if period_start is not None and period_end is not None:
+            return period_start <= day <= period_end
+        return day.year == year
 
     revenue_by_zip: dict[str, Decimal] = defaultdict(Decimal)
     for row in master_rows:
         day = parse_date(row.get("Created Date", ""), settings["date_formats"])
         zip_code = normalize_zip(row.get("Location Zip", ""))
-        if day is None or day.year != year or not zip_code:
+        if not in_scope(day) or not zip_code:
             continue
         try:
             revenue_by_zip[zip_code] += Decimal(clean_text(row.get("Total", "")) or "0")
@@ -62,7 +81,7 @@ def zip_code_summaries(
     for row in new_lead_rows:
         day = parse_date(row.get("Created Date", ""), settings["date_formats"])
         zip_code = normalize_zip(row.get("Location Zip", ""))
-        if day is not None and day.year == year and zip_code:
+        if in_scope(day) and zip_code:
             leads_by_zip[zip_code] += 1
 
     revenue_rows: list[ZipMetricRow] = [
@@ -77,7 +96,8 @@ def zip_code_summaries(
             leads_by_zip.items(), key=lambda item: (-item[1], item[0])
         )
     ]
-    return year, revenue_rows, lead_rows
+    summary_year = period_end.year if period_end is not None else year
+    return summary_year, revenue_rows, lead_rows
 
 
 def _service_account_client(

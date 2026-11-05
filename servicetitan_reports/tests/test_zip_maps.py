@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,34 @@ class ZipMapTest(unittest.TestCase):
             {"Zip": "92109", "New leads": 2},
             {"Zip": "92037", "New leads": 1},
         ])
+
+    def test_summaries_change_with_selected_report_period(self):
+        master = [
+            {"Created Date": "2026-09-21", "Location Zip": "92037", "Total": "100"},
+            {"Created Date": "2026-10-04", "Location Zip": "92037", "Total": "50"},
+            {"Created Date": "2026-10-05", "Location Zip": "92109", "Total": "300"},
+            {"Created Date": "2026-10-18", "Location Zip": "92109", "Total": "25"},
+        ]
+        leads = [
+            {"Created Date": "2026-09-22", "Location Zip": "92037"},
+            {"Created Date": "2026-10-06", "Location Zip": "92109"},
+        ]
+
+        first = zip_code_summaries(
+            master, leads, self.settings, date(2026, 9, 21), date(2026, 10, 4)
+        )
+        second = zip_code_summaries(
+            master, leads, self.settings, date(2026, 10, 5), date(2026, 10, 18)
+        )
+
+        self.assertEqual(first[1:], (
+            [{"Zip": "92037", "Revenue": 150.0}],
+            [{"Zip": "92037", "New leads": 1}],
+        ))
+        self.assertEqual(second[1:], (
+            [{"Zip": "92109", "Revenue": 325.0}],
+            [{"Zip": "92109", "New leads": 1}],
+        ))
 
     def test_publish_replaces_both_source_sheets(self):
         class Worksheet:
