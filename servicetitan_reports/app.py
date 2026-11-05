@@ -101,15 +101,18 @@ def refresh_zip_map_sources(result) -> str | None:
 
 
 def render_zip_ranking(rows, metric) -> None:
-    """Render the top 20 ZIPs with the values that determine their rank."""
     if not rows:
         st.info("No ZIP data is available.")
         return
-    st.dataframe(
-        [{"Rank": index, **row} for index, row in enumerate(rows[:20], 1)],
-        hide_index=True, width="stretch",
-        column_config={"Zip": st.column_config.TextColumn("ZIP"),
-                       metric: st.column_config.NumberColumn(metric, format="$%.2f" if metric == "Revenue" else "%d")},
+
+    zip_codes = [str(row["Zip"]) for row in rows[:20]]
+
+    st.markdown(
+        "<div style='line-height:1.35; font-size:14px;'>"
+        + "<div>".join([]) +
+        "".join(f"<div>{zip_code}</div>" for zip_code in zip_codes)
+        + "</div>",
+        unsafe_allow_html=True,
     )
 
 
@@ -217,12 +220,7 @@ try:
             st.session_state['map_setup_checked'] = True
 except Exception:
     pass
-with st.expander("Historical imports and corrections"):
-    allow_historical = st.checkbox("Allow a historical import spanning more than 14 days")
-    allow_correction = st.checkbox(
-        "Intentionally reapply a previous file or replace complete job groups",
-        help="Only enable after checking the export contains every job for each customer/date/business-unit/job-type group. Missing rows in replaced groups will be removed; the previous master is backed up.",
-    )
+
 if st.button("Clean and save report", type="primary", disabled=raw_upload is None):
     try:
         with st.spinner("Cleaning the report and updating both shared datasets…"):
@@ -231,7 +229,8 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
             st.session_state.pop('loaded_report_id', None)
             result = store.import_report(
                 raw_upload.getvalue(), raw_upload.name, email,
-                allow_historical=allow_historical, allow_correction=allow_correction,
+                allow_historical=True,
+                allow_correction=False,
             )
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem
@@ -273,8 +272,12 @@ try:
                          for record_id, version, name, created in reports}
         if st.session_state.get("saved_report_id") not in report_labels:
             st.session_state.pop("saved_report_id", None)
-        selected_report = st.selectbox("Saved report", list(report_labels),
-                                       format_func=report_labels.get, key="saved_report_id")
+        selected_report = st.selectbox(
+            "Saved report",
+            options=list(report_labels.keys()),
+            format_func=lambda record_id: report_labels[record_id],
+            key="saved_report_id",
+        )
         if st.session_state.get("loaded_report_id") != selected_report:
             selected_version = next(version for record_id, version, _, _ in reports if record_id == selected_report)
             if st.session_state.get('just_imported_version') == selected_version and st.session_state.get('import_result'):
@@ -298,35 +301,62 @@ result = st.session_state.get("import_result")
 if result:
     period_label = f"{result.period_start:%Y-%m-%d} to {result.period_end:%Y-%m-%d}" if result.period_start else "Original date range unavailable"
     st.caption(f"Saved report: {st.session_state['raw_stem']} · {period_label}")
-    if hasattr(result, "dataset_version"):
-        st.caption("Metrics are the original saved import counts. Comparisons and recalculated analysis use this report's retained master snapshot, not today's master.")
     first, second, third, fourth, fifth = st.columns(5)
     first.metric("Valid records", f"{result.cleaned_rows:,}")
     second.metric("Added to master", f"{result.appended_rows:,}")
     third.metric("Updated records", f"{getattr(result, 'updated_rows', 0):,}")
     fourth.metric("Unchanged records", f"{result.skipped_duplicate_rows:,}")
     fifth.metric("New customers", f"{result.new_customers:,}")
-    st.caption("Added, updated and unchanged count incoming rows. Exact matches are unchanged; remaining rows are matched within each job group.")
     if getattr(result, "removed_rows", 0):
         st.warning(f"{result.removed_rows:,} prior rows were removed by the confirmed group replacement. The previous master is retained in history/backups.")
 
     raw_stem = st.session_state["raw_stem"]
 
 st.subheader("Import downloads")
-if result:
-    if result.cleaned_csv is not None:
-        st.download_button("Download cleaned export", result.cleaned_csv, f"{raw_stem}_cleaned.csv", "text/csv", on_click="ignore")
-    if result.analysis_csv is not None:
-        st.download_button("Download recalculated analysis", result.analysis_csv, f"{raw_stem}_analysis_recalculated.csv", "text/csv", on_click="ignore")
-    if getattr(result, "original_analysis_csv", None) is not None:
-        st.download_button("Download original saved analysis", result.original_analysis_csv, f"{raw_stem}_analysis_original.csv", "text/csv", on_click="ignore")
-    if result.analysis_csv is None:
-        st.info("Recalculated analysis is unavailable because the original export or master snapshot is no longer retained.")
 
-if master is not None and leads is not None and current_status is not None:
-    left, right = st.columns(2)
-    left.download_button("Download Master", master, "lma_master.csv", "text/csv", on_click="ignore")
-    right.download_button("Download New Leads Master", leads, "lma_new_leads_only.csv", "text/csv", on_click="ignore")
+col1, col2, col3, col4 = st.columns(4, gap="small")
+
+with col1:
+    if result and result.cleaned_csv is not None:
+        st.download_button(
+            "Download cleaned export",
+            result.cleaned_csv,
+            f"{raw_stem}_cleaned.csv",
+            "text/csv",
+            on_click="ignore",
+        )
+
+with col2:
+    if result and getattr(result, "original_analysis_csv", None) is not None:
+        st.download_button(
+            "Download Analysis",
+            result.original_analysis_csv,
+            f"{raw_stem}_analysis_original.csv",
+            "text/csv",
+            on_click="ignore",
+        )
+
+with col3:
+    if master is not None and current_status is not None:
+        st.download_button(
+            "Download Master",
+            master,
+            "lma_master.csv",
+            "text/csv",
+            on_click="ignore",
+        )
+
+with col4:
+    if leads is not None and current_status is not None:
+        st.download_button(
+            "Download New Leads Master",
+            leads,
+            "lma_new_leads_only.csv",
+            "text/csv",
+            on_click="ignore",
+        )
+
+if current_status is not None:
     st.caption(f"Current dataset version: {current_status.version:,}")
 else:
     st.warning("The latest shared datasets are unavailable for download.")
@@ -426,23 +456,23 @@ if dashboard and dashboard['has_rows']:
 
     with leads_section:
         st.write("**New leads**")
-        leads_list, leads_map = st.columns([2, 3], gap="small")
+        leads_list, leads_map = st.columns([1, 8], gap="small")
         with leads_list:
             render_zip_ranking(zip_new_lead_rows, "New leads")
         with leads_map:
             if leads_embed_url:
-                components.iframe(leads_embed_url, height=540, scrolling=False)
+                components.iframe(leads_embed_url, height=430, scrolling=False)
             else:
                 st.info("The new-lead heatmap embed URL is not configured yet.")
 
     with revenue_section:
         st.write("**Revenue**")
-        revenue_list, revenue_map = st.columns([2, 3], gap="small")
+        revenue_list, revenue_map = st.columns([1, 8], gap="small")
         with revenue_list:
             render_zip_ranking(zip_revenue_rows, "Revenue")
         with revenue_map:
             if revenue_embed_url:
-                components.iframe(revenue_embed_url, height=540, scrolling=False)
+                components.iframe(revenue_embed_url, height=430, scrolling=False)
             else:
                 st.info("The revenue heatmap embed URL is not configured yet.")
 
@@ -463,6 +493,10 @@ if dashboard and dashboard['has_rows']:
     charts = weekly_charts(workflow_cache, dashboard, SETTINGS, selected_statuses)
     for category in ("Plumbing", "HVAC"):
         chart_rows, years = charts[category]
+        chart_rows = [
+            row for row in chart_rows
+            if 1 <= row["Week"] <= 52
+]
         st.write(f"**{category}**")
         if years and chart_rows:
             st.vega_lite_chart(
@@ -471,8 +505,7 @@ if dashboard and dashboard['has_rows']:
                     "transform": [{"fold": [str(years[0]), str(years[1])], "as": ["Year", "Opportunities"]}],
                     "mark": "line",
                     "encoding": {
-                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [0, 54], "nice": False}, "axis": {"title": "ISO week"}},
-                        "y": {"field": "Opportunities", "type": "quantitative"},
+                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [1, 52], "nice": False}, "axis": {"title": "ISO week"}},                        "y": {"field": "Opportunities", "type": "quantitative"},
                         "color": {"field": "Year", "type": "nominal"},
                         "tooltip": [{"field": "Week"}, {"field": "Year"}, {"field": "Opportunities"}],
                     },

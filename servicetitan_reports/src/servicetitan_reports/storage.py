@@ -418,14 +418,12 @@ class PersistentDatasetStore:
             start, end = infer_period(incoming, self.settings)
             if master is not None:
                 master_rows = cached_rows if cached_rows is not None else read_and_clean_csv_bytes(master, self.settings, "Saved master")
-                comparisons = category_period_comparisons(master_rows, start, end, self.settings)
-                statuses, columns = job_status_analysis(incoming)
-                corrected = analysis_csv_bytes(comparisons, statuses, columns)
+            comparisons = category_period_comparisons(master_rows, start, end, self.settings)
         return SimpleNamespace(
             dataset_version=version, source_name=name, cleaned_rows=valid,
             appended_rows=added, updated_rows=updated, skipped_duplicate_rows=unchanged,
             new_customers=customers, cleaned_csv=cleaned, original_analysis_csv=original,
-            analysis_csv=corrected, master_csv=master, period_start=start, period_end=end,
+            analysis_csv=None, master_csv=master, period_start=start, period_end=end,
             category_comparisons=comparisons, removed_rows=0,
         )
 
@@ -610,8 +608,7 @@ class PersistentDatasetStore:
                 SELECT 1 FROM lma_private.import_outputs WHERE cleaned_csv = %s
                 LIMIT 1
             """, (content_hash, _compressed(csv_bytes(cleaned_rows, self.settings["master_columns"]))))
-            if cursor.fetchone() and not allow_correction:
-                raise ValueError("This exact file was already saved. Use its history downloads, or enable correction to intentionally reapply it.")
+            is_duplicate_upload = bool(cursor.fetchone())
             cursor.execute("""
                 SELECT version, master_csv, new_leads_csv
                 FROM lma_private.dataset_state
@@ -631,8 +628,18 @@ class PersistentDatasetStore:
                 allow_group_replacement=allow_correction,
                 cleaned_rows=cleaned_rows,
             )
+            if is_duplicate_upload and not allow_correction:
+                return replace(
+                    result,
+                    dataset_version=version,
+                    source_name=source_name,
+                )
             if result.appended_rows == 0 and result.updated_rows == 0 and result.removed_rows == 0:
-                raise ValueError("All uploaded records already match the master. No new version or backup was created.")
+                return replace(
+                    result,
+                    dataset_version=version,
+                    source_name=source_name,
+                )
             next_version = version + 1
 
             cursor.execute("""
