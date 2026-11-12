@@ -12,6 +12,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
+
 
 MONTH_NAMES = (
     "",
@@ -28,6 +32,9 @@ MONTH_NAMES = (
     "November",
     "December",
 )
+
+SERVICE_CATEGORY_COLUMN = "Category"
+PIPELINE_API_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -308,6 +315,153 @@ def csv_bytes(rows: list[dict[str, str]], columns: list[str]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
+def categorized_csv_bytes(
+    rows: list[dict[str, str]],
+    settings: dict[str, Any],
+) -> bytes:
+    """Create a CSV with the reporting category shown on every job row."""
+
+    category_map = invoice_category_mapping(settings)
+    categorized_rows = [
+        {
+            **row,
+            SERVICE_CATEGORY_COLUMN: invoice_category(
+                row, settings, category_map
+            ),
+        }
+        for row in rows
+    ]
+    columns = list(settings["master_columns"])
+    if SERVICE_CATEGORY_COLUMN not in columns:
+        category_index = (
+            columns.index("Opportunity") + 1
+            if "Opportunity" in columns
+            else len(columns)
+        )
+        columns.insert(category_index, SERVICE_CATEGORY_COLUMN)
+    return csv_bytes(categorized_rows, columns)
+
+
+def ensure_categorized_csv_bytes(
+    contents: bytes,
+    settings: dict[str, Any],
+    dataset_name: str = "Cleaned export",
+) -> bytes:
+    """Add the service category to a legacy cleaned CSV when it is missing."""
+
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{dataset_name} must be saved as a UTF-8 CSV.") from error
+    columns = next(csv.reader(io.StringIO(text)), [])
+    if SERVICE_CATEGORY_COLUMN in columns:
+        return contents
+    rows = read_and_clean_csv_bytes(contents, settings, dataset_name)
+    return categorized_csv_bytes(rows, settings)
+
+
+def period_new_leads_xlsx_bytes(
+    rows: list[dict[str, str]],
+    period_start: date,
+    period_end: date,
+    settings: dict[str, Any],
+) -> bytes:
+    """Split a saved new-leads snapshot into the reference-style workbook."""
+
+    if period_end < period_start:
+        raise ValueError("Period end must be on or after period start.")
+
+    selected_rows = [
+        row
+        for row in rows
+        if (
+            (day := parse_date(row.get("Created Date", ""), settings["date_formats"]))
+            is not None
+            and period_start <= day <= period_end
+        )
+    ]
+    category_map = invoice_category_mapping(settings)
+
+    period_rows = {
+        category: [
+            row
+            for row in selected_rows
+            if invoice_category(row, settings, category_map) == category
+        ]
+        for category in ("Plumbing", "HVAC")
+    }
+    columns = list(settings["master_columns"])
+    if SERVICE_CATEGORY_COLUMN not in columns:
+        columns.insert(columns.index("Opportunity") + 1, SERVICE_CATEGORY_COLUMN)
+
+    def sort_key(row: dict[str, str]) -> tuple[str, date, str]:
+        return (
+            clean_text(row.get("Job Type", "")).casefold(),
+            parse_date(row.get("Created Date", ""), settings["date_formats"])
+            or date.min,
+            clean_text(row.get("Customer ID", "")),
+        )
+
+    def excel_value(column: str, value: str) -> object:
+        cleaned = clean_text(value)
+        if column in {"Created Date", "Completion Date"}:
+            return parse_date(cleaned, settings["date_formats"])
+        if column == "Opportunity" and cleaned.casefold() in {"true", "false"}:
+            return cleaned.casefold() == "true"
+        if column in {
+            "C Year", "C Qtr", "B Year", "B Qtr", "B Wk"
+        } and cleaned.isdigit():
+            return int(cleaned)
+        if column == "Total" and cleaned:
+            try:
+                amount = Decimal(cleaned)
+                return int(amount) if amount == amount.to_integral() else float(amount)
+            except InvalidOperation:
+                pass
+        return cleaned
+
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    for index, category in enumerate(("Plumbing", "HVAC"), start=1):
+        sheet = workbook.create_sheet(category)
+        sheet.append(columns)
+        for row in sorted(period_rows[category], key=sort_key, reverse=True):
+            categorized_row = {
+                **row,
+                SERVICE_CATEGORY_COLUMN: category,
+            }
+            sheet.append([
+                excel_value(column, categorized_row.get(column, ""))
+                for column in columns
+            ])
+        for column_index, column in enumerate(columns, start=1):
+            if column in {"Created Date", "Completion Date"}:
+                for cell in sheet.iter_cols(
+                    min_col=column_index,
+                    max_col=column_index,
+                    min_row=2,
+                    max_row=sheet.max_row,
+                ):
+                    for item in cell:
+                        item.number_format = "mm-dd-yy"
+        table = Table(
+            displayName=f"Table{index}",
+            ref=f"A1:{get_column_letter(len(columns))}{sheet.max_row}",
+        )
+        table.tableStyleInfo = TableStyleInfo(
+            name="TableStyleMedium2",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False,
+        )
+        sheet.add_table(table)
+
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 PERIOD_COMPARISON_COLUMNS = [
     "Period",
     "Start",
@@ -491,25 +645,6 @@ def first_seen_customer_rows(
             key=lambda item: (item[0], item[2].get("Customer ID", ""), item[1]),
         )
     ]
-
-
-def extend_new_leads_master(
-    stored_rows: list[dict[str, str]],
-    candidate_rows: list[dict[str, str]],
-    settings: dict[str, Any],
-) -> list[dict[str, str]]:
-    """Preserve the saved New Leads Master and append unseen customers only."""
-
-    authoritative_rows = first_seen_customer_rows(stored_rows, settings)
-    customer_ids = {
-        clean_text(row.get("Customer ID", "")) for row in authoritative_rows
-    }
-    for row in first_seen_customer_rows(candidate_rows, settings):
-        customer_id = clean_text(row.get("Customer ID", ""))
-        if customer_id and customer_id not in customer_ids:
-            authoritative_rows.append(row)
-            customer_ids.add(customer_id)
-    return first_seen_customer_rows(authoritative_rows, settings)
 
 
 def row_identity(
@@ -878,7 +1013,7 @@ def run_import(
 
     cleaned_file = output_dir / f"{source.stem}_cleaned.csv"
 
-    write_csv(cleaned_file, processed.cleaned_rows, columns)
+    cleaned_file.write_bytes(categorized_csv_bytes(processed.cleaned_rows, settings))
     write_csv(output_dir / "new_customers.csv", processed.new_customer_rows, columns)
 
     new_leads_path = master_path.parent / settings["new_leads_filename"]
@@ -946,7 +1081,7 @@ def run_uploaded_import(
         new_customers=len(processed.new_customer_rows),
         period_start=processed.period_start,
         period_end=processed.period_end,
-        cleaned_csv=csv_bytes(processed.cleaned_rows, columns),
+        cleaned_csv=categorized_csv_bytes(processed.cleaned_rows, settings),
         master_csv=csv_bytes(processed.master_rows, columns),
         new_leads_csv=csv_bytes(processed.new_leads_rows, columns),
         analysis_csv=processed.analysis_csv,

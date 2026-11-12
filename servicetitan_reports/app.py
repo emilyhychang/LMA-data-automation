@@ -16,20 +16,26 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from servicetitan_reports import pipeline as pipeline_module  # noqa: E402
+
+# Streamlit can rerun this file while retaining an older imported pipeline
+# module. Reload it before importing helpers added by a code update.
+if getattr(pipeline_module, "PIPELINE_API_VERSION", 0) < 2:
+    pipeline_module = importlib.reload(pipeline_module)
+
 from servicetitan_reports.pipeline import (  # noqa: E402
     PERIOD_COMPARISON_COLUMNS,
     category_period_comparisons,
-    first_seen_customer_rows,
+    ensure_categorized_csv_bytes,
     load_settings,
+    period_new_leads_xlsx_bytes,
     read_and_clean_csv_bytes,
-    weekly_opportunity_ytd,
 )
 from servicetitan_reports import storage as storage_module  # noqa: E402
 from servicetitan_reports.startup import open_dataset_store, StorageStartupError  # noqa: E402
 from servicetitan_reports.workflow import latest_dashboard, imported_dashboard, weekly_charts  # noqa: E402
 from servicetitan_reports.zip_maps import (  # noqa: E402
     publish_zip_summaries,
-    zip_code_summaries,
 )
 
 # Streamlit can rerun this file while retaining an older imported module.
@@ -39,14 +45,76 @@ if (
     or "new_leads_csv" not in history_fields
     or not hasattr(storage_module.PersistentDatasetStore, "history_snapshots")
     or not hasattr(storage_module.PersistentDatasetStore, "startup_status")
-    or not getattr(storage_module, "DUPLICATE_UPLOADS_REPROCESS", False)
-    or not getattr(storage_module, "NEW_LEADS_MASTER_HEATMAPS", False)
+    or getattr(storage_module, "STORAGE_API_VERSION", 0) < 2
 ):
     storage_module = importlib.reload(storage_module)
 PersistentDatasetStore = storage_module.PersistentDatasetStore
 
 
 SETTINGS = load_settings(ROOT / "config" / "settings.json")
+CURRENT_UPLOAD_REPORT = "__current_upload__"
+
+
+@st.cache_data(max_entries=50, show_spinner=False)
+def cleaned_download_bytes(contents: bytes) -> bytes:
+    """Ensure current and legacy cleaned downloads expose service category."""
+
+    try:
+        return ensure_categorized_csv_bytes(contents, SETTINGS)
+    except ValueError:
+        return contents
+
+
+@st.cache_data(max_entries=20, show_spinner=False)
+def period_new_leads_download_bytes(
+    new_leads_csv: bytes,
+    period_start,
+    period_end,
+) -> bytes:
+    """Build one report-period workbook from its saved new-leads snapshot."""
+
+    new_lead_rows = read_and_clean_csv_bytes(
+        new_leads_csv,
+        SETTINGS,
+        "Saved New Leads Master",
+        allow_empty=True,
+    )
+    return period_new_leads_xlsx_bytes(
+        new_lead_rows,
+        period_start,
+        period_end,
+        SETTINGS,
+    )
+
+
+@st.cache_data(max_entries=50, show_spinner=False)
+def report_category_comparisons(
+    master_csv: bytes,
+    new_leads_csv: bytes,
+    period_start,
+    period_end,
+):
+    """Recalculate comparisons from the report currently shown on screen."""
+
+    report_rows = read_and_clean_csv_bytes(
+        master_csv,
+        SETTINGS,
+        "Report master",
+        allow_empty=True,
+    )
+    new_lead_rows = read_and_clean_csv_bytes(
+        new_leads_csv,
+        SETTINGS,
+        "Saved New Leads Master",
+        allow_empty=True,
+    )
+    return category_period_comparisons(
+        report_rows,
+        period_start,
+        period_end,
+        SETTINGS,
+        new_lead_rows,
+    )
 
 REVENUE_SPREADSHEET_ID = "19IdcStsC024mIoOEoel-I-tZO-dBSby3jwHcUl80Pgo"
 NEW_LEADS_SPREADSHEET_ID = "1QAtvpIVhxOPc72Px3A1j6l9exDA4dPgVrsQUWcvFa2A"
@@ -62,7 +130,7 @@ NEW_LEADS_HEATMAP_URL = (
 
 def secret_list(section: str, key: str) -> set[str]:
     return {
-        str(value).strip().lower()
+        str(value).strip().casefold()
         for value in st.secrets.get(section, {}).get(key, [])
         if str(value).strip()
     }
@@ -107,14 +175,12 @@ def render_zip_ranking(rows, metric) -> None:
         st.info("No ZIP data is available.")
         return
 
-    zip_codes = [str(row["Zip"]) for row in rows[:20]]
-
-    st.markdown(
-        "<div style='line-height:1.35; font-size:14px;'>"
-        + "<div>".join([]) +
-        "".join(f"<div>{zip_code}</div>" for zip_code in zip_codes)
-        + "</div>",
-        unsafe_allow_html=True,
+    st.dataframe(
+        rows[:20],
+        column_order=("Zip", metric),
+        hide_index=True,
+        height=430,
+        alt=f"Top ZIP codes by {metric.casefold()}",
     )
 
 
@@ -144,12 +210,21 @@ def require_approved_user() -> tuple[str, bool]:
         st.stop()
 
     user = st.user.to_dict()
-    email = str(user.get("email") or user.get("preferred_username") or "").lower()
+    email = str(
+        user.get("email") or user.get("preferred_username") or ""
+    ).strip().casefold()
+    email_verified = user.get("email_verified") is not False
     allowed = secret_list("access", "allowed_emails")
     admins = secret_list("access", "admin_emails")
     allowed.update(admins)
-    if user.get("email_verified") is False or not email or email not in allowed:
+    if not email_verified or not email or email not in allowed:
         st.error("This account is not approved to use this app.")
+        if email:
+            st.caption(f"Google signed you in as: `{email}`")
+        else:
+            st.caption("Google did not return an email address for this account.")
+        if not email_verified:
+            st.caption("Google reported that this email address is not verified.")
         st.button("Sign out", on_click=st.logout)
         st.stop()
     return email, email in admins
@@ -245,24 +320,32 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
             workflow_cache.clear()
             st.session_state.pop('import_result', None)
             st.session_state.pop('loaded_report_id', None)
+            upload_contents = raw_upload.getvalue()
             result = store.import_report(
-                raw_upload.getvalue(), raw_upload.name, email,
+                upload_contents,
+                raw_upload.name,
+                email,
                 allow_historical=True,
                 allow_correction=False,
             )
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem
-        st.session_state.pop("saved_report_id", None)
-        st.session_state.pop("loaded_report_id", None)
+        st.session_state["current_upload_result"] = result
+        st.session_state["current_upload_stem"] = Path(raw_upload.name).stem
+        st.session_state["show_current_upload"] = True
+        st.session_state["saved_report_id"] = CURRENT_UPLOAD_REPORT
+        st.session_state["loaded_report_id"] = CURRENT_UPLOAD_REPORT
         imported_status = storage_module.DatasetStatus(result.dataset_version, datetime.now(ZoneInfo('UTC')), email)
         imported_dashboard(workflow_cache, result, imported_status)
         try:
             dataset_status = store.status()
         except Exception:
             dataset_status = imported_status
-        st.session_state['just_imported_version'] = result.dataset_version
         try:
-            store.refresh_maps(refresh_zip_map_sources, prepared=result)
+            store.refresh_maps(
+                refresh_zip_map_sources,
+                prepared=result,
+            )
         except Exception:
             st.warning("The report was saved, but map refresh could not complete. Use Refresh map sources below.")
         if (
@@ -271,8 +354,8 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
             and result.removed_rows == 0
         ):
             st.success(
-                "Report reprocessed successfully. The shared datasets already matched, "
-                "so no duplicate rows were added."
+                "The report was reprocessed successfully. The shared datasets "
+                "already matched, so no duplicate rows were added."
             )
         else:
             st.success(
@@ -295,29 +378,45 @@ history = []
 try:
     history = store.history_listing()
     reports = [(entry.record_id, entry.dataset_version, entry.source_name, entry.imported_at) for entry in history]
-    if reports:
-        report_labels = {record_id: f"{created:%Y-%m-%d} · {name} · version {version}"
-                         for record_id, version, name, created in reports}
-        if st.session_state.get("saved_report_id") not in report_labels:
-            st.session_state.pop("saved_report_id", None)
+    current_upload = st.session_state.get("current_upload_result")
+    show_current_upload = bool(
+        st.session_state.get("show_current_upload") and current_upload is not None
+    )
+    if reports or show_current_upload:
+        report_labels = {
+            record_id: f"{created:%Y-%m-%d} · {name} · version {version}"
+            for record_id, version, name, created in reports
+        }
+        report_options = list(report_labels)
+        if show_current_upload:
+            current_stem = st.session_state.get(
+                "current_upload_stem", "Current upload"
+            )
+            report_labels[CURRENT_UPLOAD_REPORT] = (
+                f"Current upload · {current_stem} · version "
+                f"{current_upload.dataset_version}"
+            )
+            report_options.insert(0, CURRENT_UPLOAD_REPORT)
+        if st.session_state.get("saved_report_id") not in report_options:
+            st.session_state["saved_report_id"] = report_options[0]
         selected_report = st.selectbox(
             "Saved report",
-            options=list(report_labels.keys()),
+            options=report_options,
             format_func=lambda record_id: report_labels[record_id],
             key="saved_report_id",
         )
-        if st.session_state.get("loaded_report_id") != selected_report:
-            selected_version = next(version for record_id, version, _, _ in reports if record_id == selected_report)
-            if st.session_state.get('just_imported_version') == selected_version and st.session_state.get('import_result'):
-                restored = st.session_state['import_result']
-            else:
-                st.session_state.pop("import_result", None)
-                snapshot = (current_status.version, master, render_rows) if current_status else None
-                restored = store.load_saved_report(selected_report, cached_snapshot=snapshot)
+        if selected_report == CURRENT_UPLOAD_REPORT:
+            st.session_state["import_result"] = current_upload
+            st.session_state["raw_stem"] = st.session_state.get(
+                "current_upload_stem", "current_upload"
+            )
+            st.session_state["loaded_report_id"] = CURRENT_UPLOAD_REPORT
+        elif st.session_state.get("loaded_report_id") != selected_report:
+            snapshot = (current_status.version, master, render_rows) if current_status else None
+            restored = store.load_saved_report(selected_report, cached_snapshot=snapshot)
             st.session_state["import_result"] = restored
             st.session_state["raw_stem"] = Path(restored.source_name).stem
             st.session_state["loaded_report_id"] = selected_report
-            st.session_state.pop('just_imported_version', None)
 except Exception:
     st.warning("Saved report details could not be loaded. Refresh to try again.")
 
@@ -342,23 +441,40 @@ if result:
 
 st.subheader("Import downloads")
 
-col1, col2, col3, col4 = st.columns(4, gap="small")
+col1, col2, col3, col4, col5 = st.columns(5, gap="small")
 
 with col1:
     if result and result.cleaned_csv is not None:
         st.download_button(
             "Download cleaned export",
-            result.cleaned_csv,
+            cleaned_download_bytes(result.cleaned_csv),
             f"{raw_stem}_cleaned.csv",
             "text/csv",
             on_click="ignore",
         )
 
 with col2:
-    if result and getattr(result, "original_analysis_csv", None) is not None:
+    analysis_download = None
+    if result:
+        analysis_download = (
+            getattr(result, "analysis_csv", None)
+            or getattr(result, "original_analysis_csv", None)
+        )
+    if analysis_download is not None:
         st.download_button(
-            "Download Analysis",
-            result.original_analysis_csv,
+            "Download analysis",
+            analysis_download,
+            f"{raw_stem}_analysis.csv",
+            "text/csv",
+            on_click="ignore",
+        )
+    original_analysis = (
+        getattr(result, "original_analysis_csv", None) if result else None
+    )
+    if original_analysis is not None and original_analysis != analysis_download:
+        st.download_button(
+            "Download original saved analysis",
+            original_analysis,
             f"{raw_stem}_analysis_original.csv",
             "text/csv",
             on_click="ignore",
@@ -384,19 +500,55 @@ with col4:
             on_click="ignore",
         )
 
+with col5:
+    period_new_leads_csv = (
+        getattr(result, "new_leads_csv", None) if result else None
+    )
+    if (
+        period_new_leads_csv is not None
+        and getattr(result, "period_start", None)
+        and getattr(result, "period_end", None)
+    ):
+        period_filename = (
+            f"New leads {result.period_start:%Y-%m-%d} to "
+            f"{result.period_end:%Y-%m-%d}.xlsx"
+        )
+        st.download_button(
+            "Download period new leads",
+            period_new_leads_download_bytes(
+                period_new_leads_csv,
+                result.period_start,
+                result.period_end,
+            ),
+            period_filename,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click="ignore",
+            help=(
+                "Downloads one dated Excel workbook with separate Plumbing and "
+                "HVAC sheets containing only new leads from this report period."
+            ),
+        )
+
 if current_status is not None:
     st.caption(f"Current dataset version: {current_status.version:,}")
 else:
     st.warning("The latest shared datasets are unavailable for download.")
 
-fresh_comparisons = getattr(result, 'category_comparisons', None) if result else None
-if result and result.period_start and fresh_comparisons is None and result.master_csv is not None:
-    report_rows = read_and_clean_csv_bytes(result.master_csv, SETTINGS, 'Report master', allow_empty=True)
-    fresh_comparisons = category_period_comparisons(report_rows, result.period_start, result.period_end, SETTINGS)
-    # Reuse the comparison on widget reruns even for an older in-session result.
-    if hasattr(result, '__dict__'):
-        object.__setattr__(result, 'category_comparisons', fresh_comparisons)
-    report_rows = None
+fresh_comparisons = None
+if (
+    result
+    and result.period_start
+    and result.master_csv is not None
+    and getattr(result, "new_leads_csv", None) is not None
+):
+    fresh_comparisons = report_category_comparisons(
+        result.master_csv,
+        result.new_leads_csv,
+        result.period_start,
+        result.period_end,
+    )
+elif result:
+    fresh_comparisons = getattr(result, "category_comparisons", None)
 if fresh_comparisons:
     st.subheader("Period comparisons")
     st.caption(
@@ -420,7 +572,8 @@ if fresh_comparisons:
         st.dataframe(
             display_rows,
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
+            alt=f"{category} current, previous, and prior-year period comparison",
             column_config={
                 "Revenue": st.column_config.NumberColumn(
                     "Revenue", format="$%.2f"
@@ -513,21 +666,6 @@ if dashboard and dashboard['has_rows']:
         st.caption("Looker Studio may cache its display. Check the map's ‘Map data generated at’ time against the successful refresh time. A refresh of one spreadsheet cannot guarantee the other succeeded.")
     except Exception:
         st.warning("Map freshness could not be checked or refreshed. Try again; the saved report is unchanged.")
-    st.markdown(
-        """
-        <style>
-        .zip-ranking {
-            padding: 0.15rem 0 0 0.2rem;
-        }
-        .zip-ranking div {
-            font-size: 0.92rem;
-            line-height: 1.55;
-            white-space: nowrap;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
     leads_section, revenue_section = st.columns(2, gap="large")
     looker_settings = dict(st.secrets.get("looker_studio", {}))
     revenue_embed_url = str(
@@ -593,10 +731,6 @@ if dashboard and dashboard['has_rows']:
     charts = weekly_charts(workflow_cache, dashboard, SETTINGS, selected_statuses)
     for category in ("Plumbing", "HVAC"):
         chart_rows, years = charts[category]
-        chart_rows = [
-            row for row in chart_rows
-            if 1 <= row["Week"] <= 52
-]
         st.write(f"**{category}**")
         if years and chart_rows:
             st.vega_lite_chart(
@@ -605,12 +739,13 @@ if dashboard and dashboard['has_rows']:
                     "transform": [{"fold": [str(years[0]), str(years[1])], "as": ["Year", "Opportunities"]}],
                     "mark": "line",
                     "encoding": {
-                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [1, 52], "nice": False}, "axis": {"title": "ISO week"}},                        "y": {"field": "Opportunities", "type": "quantitative"},
+                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [0, 54], "nice": False}, "axis": {"title": "ISO week"}},                        "y": {"field": "Opportunities", "type": "quantitative"},
                         "color": {"field": "Year", "type": "nominal"},
                         "tooltip": [{"field": "Week"}, {"field": "Year"}, {"field": "Opportunities"}],
                     },
                 },
                 width="stretch",
+                alt=f"Weekly {category} opportunities for {years[0]} and {years[1]}",
             )
         else:
             st.info(f"No {category} opportunity history is available yet.")
@@ -676,6 +811,7 @@ def render_file_history(history):
                         } for item in duplicate_preview],
                         hide_index=True,
                         width="stretch",
+                        alt="Duplicate upload-history entries selected for removal",
                     )
                     st.warning(
                         "This removes duplicate upload-history entries only. Master "
@@ -772,7 +908,7 @@ def render_file_history(history):
                     if cleaned_bytes is not None:
                         cleaned.download_button(
                             "Download cleaned export",
-                            cleaned_bytes,
+                            cleaned_download_bytes(cleaned_bytes),
                             f"{source_stem}_cleaned.csv",
                             "text/csv",
                             key=f"history-cleaned-{entry.record_id}",

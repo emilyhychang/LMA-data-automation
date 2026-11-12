@@ -71,7 +71,7 @@ class ImportSafetyTest(unittest.TestCase):
         self.assertEqual(result.skipped_duplicate_rows, 1)
         self.assertTrue(all(call.args[0].lstrip().startswith("SELECT") for call in cursor.execute.call_args_list))
 
-    def test_exact_rerun_uses_saved_new_leads_master_for_zip_heatmap(self):
+    def test_exact_rerun_repairs_saved_new_leads_from_complete_master(self):
         connection = MagicMock()
         cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
         master_row = {**self.row, "Location Zip": "92109"}
@@ -91,8 +91,11 @@ class ImportSafetyTest(unittest.TestCase):
 
         self.assertEqual(
             result.zip_new_lead_rows,
-            [{"Zip": "92037", "New leads": 1}],
+            [{"Zip": "92109", "New leads": 1}],
         )
+        self.assertEqual(result.dataset_version, 36)
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(any("UPDATE lma_private.dataset_state" in sql for sql in statements))
 
     def test_explicit_correction_can_reapply_old_file_and_retains_all_history(self):
         store, cursor = self.store([{**self.row, "Total": "200"}], repeat=True)

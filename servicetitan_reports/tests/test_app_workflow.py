@@ -38,7 +38,6 @@ class AppWorkflowTest(unittest.TestCase):
         self.stack.enter_context(patch.object(PersistentDatasetStore, "status", return_value=status))
         self.stack.enter_context(patch.object(PersistentDatasetStore, "downloads", return_value=(master, master, status)))
         self.stack.enter_context(patch.object(PersistentDatasetStore, "history_listing", return_value=self.history))
-        self.stack.enter_context(patch.object(PersistentDatasetStore, "saved_reports", return_value=[]))
         self.stack.enter_context(patch.object(PersistentDatasetStore, 'load_saved_report',
                                              side_effect=lambda record_id, **kwargs: self.restored(record_id, 100)))
         self.stack.enter_context(patch.object(PersistentDatasetStore, "map_status", return_value=None))
@@ -56,13 +55,13 @@ class AppWorkflowTest(unittest.TestCase):
         downloads = self.stack.enter_context(patch.object(PersistentDatasetStore, 'downloads', return_value=(self.master, self.master, status)))
         probe = self.stack.enter_context(patch.object(PersistentDatasetStore, 'status', return_value=status))
         self.at.run()
-        self.at.checkbox[0].check().run()
+        self.at.run()
         self.assertFalse(self.at.exception)
         downloads.assert_called_once()
         newer = DatasetStatus(36, self.now, 'another user')
         probe.return_value = newer
         downloads.return_value = (self.master, self.master, newer)
-        self.at.checkbox[0].uncheck().run()
+        self.at.run()
         self.assertEqual(downloads.call_count, 2)
 
     def test_account_change_discards_cached_datasets(self):
@@ -85,7 +84,7 @@ class AppWorkflowTest(unittest.TestCase):
         self.at.button(key='load-outputs-1').click().run()
         self.assertFalse(self.at.exception)
         load.assert_called_once_with(1)
-        self.at.checkbox[0].check().run()
+        self.at.run()
         load.assert_called_once()
 
     def restored(self, version, amount):
@@ -95,14 +94,13 @@ class AppWorkflowTest(unittest.TestCase):
                                cleaned_rows=1, appended_rows=1, updated_rows=0, skipped_duplicate_rows=0,
                                new_customers=1, period_start=date(2026, 9, 21), period_end=date(2026, 9, 21),
                                cleaned_csv=snapshot, master_csv=snapshot, analysis_csv=b'corrected',
-                               original_analysis_csv=b'original', category_comparisons=None)
+                               original_analysis_csv=b'original', category_comparisons=None,
+                               new_leads_csv=snapshot, new_lead_rows=None)
 
     def test_latest_report_restores_on_fresh_session_and_old_selection_uses_snapshot(self):
         self.history.extend([self.entry(2), self.entry(1)])
-        self.stack.enter_context(patch.object(PersistentDatasetStore, 'saved_reports', return_value=[
-            (2, 35, 'latest.csv', self.now), (1, 34, 'older.csv', self.now)]))
-        load = self.stack.enter_context(patch.object(PersistentDatasetStore, 'load_saved_report',
-                                                    side_effect=lambda record_id, **kwargs: self.restored(35 if record_id == 2 else 34, 200 if record_id == 2 else 50)))
+        self.stack.enter_context(patch.object(PersistentDatasetStore, 'load_saved_report',
+                                             side_effect=lambda record_id, **kwargs: self.restored(35 if record_id == 2 else 34, 200 if record_id == 2 else 50)))
         for fresh in (self.at, AppTest.from_file(str(PROJECT / 'app.py'), default_timeout=20)):
             fresh.secrets['database'] = {'url': 'unused'}
             fresh.secrets['access'] = {'admin_emails': ['test@example.com']}
@@ -115,6 +113,32 @@ class AppWorkflowTest(unittest.TestCase):
         self.assertFalse(self.at.exception)
         self.assertEqual(self.at.dataframe[0].value.iloc[0]['Revenue'], 50)
         self.assertTrue(any(e.label == 'Download original saved analysis' for e in self.at.get('download_button')))
+
+    def test_current_upload_stays_selected_instead_of_loading_latest_saved_report(self):
+        self.history.append(self.entry(1))
+        uploaded = self.restored(35, 777)
+        uploaded.source_name = 'current-upload.csv'
+        self.at.session_state['current_upload_result'] = uploaded
+        self.at.session_state['current_upload_stem'] = 'current-upload'
+        self.at.session_state['show_current_upload'] = True
+        self.at.session_state['saved_report_id'] = '__current_upload__'
+
+        self.at.run()
+
+        self.assertFalse(self.at.exception)
+        self.assertEqual(
+            self.at.selectbox(key='saved_report_id').value,
+            '__current_upload__',
+        )
+        self.assertTrue(any(
+            'Saved report: current-upload' in caption.value
+            for caption in self.at.caption
+        ))
+        self.assertEqual(self.at.dataframe[0].value.iloc[0]['Revenue'], 777)
+        self.assertTrue(any(
+            button.label == 'Download analysis'
+            for button in self.at.get('download_button')
+        ))
 
     def test_top_twenty_rankings_have_values_and_refresh_does_not_import(self):
         rows = [{'Customer ID': str(i), 'Created Date': '2026-09-21',
@@ -177,7 +201,13 @@ class AppWorkflowTest(unittest.TestCase):
         self.assertFalse(self.at.exception)
         elements = list(self.at)
         downloads = [(i, e.label) for i, e in enumerate(elements) if e.type == "download_button"]
-        self.assertEqual([label for _, label in downloads], ["Download Master", "Download New Leads Master"])
+        self.assertEqual(
+            [label for _, label in downloads],
+            [
+                "Download Master",
+                "Download New Leads Master",
+            ],
+        )
         chart_index = next(i for i, e in enumerate(elements) if e.type == "vega_lite_chart")
         self.assertTrue(all(i < chart_index for i, _ in downloads))
         charts = self.at.get("vega_lite_chart")

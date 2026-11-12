@@ -13,7 +13,6 @@ from types import SimpleNamespace
 from .pipeline import (
     UploadedImportResult,
     csv_bytes,
-    extend_new_leads_master,
     first_seen_customer_rows,
     read_and_clean_csv_bytes,
     row_snapshot,
@@ -27,8 +26,7 @@ from .pipeline import (
 
 
 LOCK_KEY = 4_812_291
-DUPLICATE_UPLOADS_REPROCESS = True
-NEW_LEADS_MASTER_HEATMAPS = True
+STORAGE_API_VERSION = 2
 MAP_TRACKING_SCHEMA = """
     CREATE TABLE IF NOT EXISTS lma_private.map_refresh_state (
         singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
@@ -378,15 +376,6 @@ class PersistentDatasetStore:
             raise ValueError("This report is no longer listed.")
         return tuple(_uncompressed(value) if value is not None else None for value in row)
 
-    def saved_reports(self):
-        """Load report selector metadata without downloading generated files."""
-        with self.connect() as connection, connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT id, dataset_version, source_name, imported_at
-                FROM lma_private.import_log ORDER BY imported_at DESC, id DESC
-            """)
-            return cursor.fetchall()
-
     def load_saved_report(self, record_id: int, *, cached_snapshot=None):
         """Restore original metrics; regenerate analysis from the saved master only."""
         with self.connect() as connection, connection.cursor() as cursor:
@@ -428,16 +417,7 @@ class PersistentDatasetStore:
             start, end = infer_period(incoming, self.settings)
             if master is not None:
                 master_rows = cached_rows if cached_rows is not None else read_and_clean_csv_bytes(master, self.settings, "Saved master")
-                lead_rows = (
-                    read_and_clean_csv_bytes(
-                        lead_master,
-                        self.settings,
-                        "Saved New Leads Master",
-                        allow_empty=True,
-                    )
-                    if lead_master is not None
-                    else first_seen_customer_rows(master_rows, self.settings)
-                )
+                lead_rows = first_seen_customer_rows(master_rows, self.settings)
                 comparisons = category_period_comparisons(
                     master_rows, start, end, self.settings, lead_rows
                 )
@@ -457,7 +437,12 @@ class PersistentDatasetStore:
             category_comparisons=comparisons, removed_rows=0, zip_year=zip_year,
             zip_revenue_rows=zip_revenue_rows,
             zip_new_lead_rows=zip_new_lead_rows,
-            new_leads_csv=lead_master, new_lead_rows=lead_rows if master is not None else None,
+            new_leads_csv=(
+                csv_bytes(lead_rows, self.settings["master_columns"])
+                if lead_rows is not None
+                else lead_master
+            ),
+            new_lead_rows=lead_rows if master is not None else None,
         )
 
     def map_status(self, *, allow_setup=False):
@@ -671,22 +656,30 @@ class PersistentDatasetStore:
                 allow_group_replacement=allow_correction,
                 cleaned_rows=cleaned_rows,
             )
+            final_master_rows = read_and_clean_csv_bytes(
+                result.master_csv,
+                self.settings,
+                "Updated master",
+                allow_empty=True,
+            )
+            authoritative_leads = first_seen_customer_rows(
+                final_master_rows, self.settings
+            )
+            authoritative_leads_csv = csv_bytes(
+                authoritative_leads, self.settings["master_columns"]
+            )
             stored_lead_rows = read_and_clean_csv_bytes(
                 _uncompressed(stored_leads),
                 self.settings,
                 "New Leads Master",
                 allow_empty=True,
             )
-            authoritative_leads = extend_new_leads_master(
-                stored_lead_rows,
-                result.new_lead_rows or [],
-                self.settings,
+            stored_leads_canonical_csv = csv_bytes(
+                first_seen_customer_rows(stored_lead_rows, self.settings),
+                self.settings["master_columns"],
             )
-            final_master_rows = read_and_clean_csv_bytes(
-                result.master_csv,
-                self.settings,
-                "Updated master",
-                allow_empty=True,
+            lead_snapshot_changed = (
+                authoritative_leads_csv != stored_leads_canonical_csv
             )
             from .zip_maps import zip_code_summaries
             zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
@@ -698,15 +691,18 @@ class PersistentDatasetStore:
             )
             result = replace(
                 result,
-                new_leads_csv=csv_bytes(
-                    authoritative_leads, self.settings["master_columns"]
-                ),
+                new_leads_csv=authoritative_leads_csv,
                 new_lead_rows=authoritative_leads,
                 zip_year=zip_year,
                 zip_revenue_rows=zip_revenue_rows,
                 zip_new_lead_rows=zip_new_lead_rows,
             )
-            if result.appended_rows == 0 and result.updated_rows == 0 and result.removed_rows == 0:
+            if (
+                result.appended_rows == 0
+                and result.updated_rows == 0
+                and result.removed_rows == 0
+                and not lead_snapshot_changed
+            ):
                 return replace(
                     result,
                     dataset_version=version,

@@ -1,4 +1,5 @@
 import csv
+import io
 import sys
 import tempfile
 import unittest
@@ -11,10 +12,13 @@ sys.path.insert(0, str(PROJECT / "src"))
 from servicetitan_reports.pipeline import (
     analysis_csv_bytes,
     category_period_comparisons,
+    categorized_csv_bytes,
     csv_bytes,
+    ensure_categorized_csv_bytes,
     first_seen_customer_rows,
     job_status_analysis,
     load_settings,
+    period_new_leads_xlsx_bytes,
     run_import,
     run_uploaded_import,
     weekly_opportunity_ytd,
@@ -117,7 +121,11 @@ class PipelineTest(unittest.TestCase):
 
             self.assertEqual(
                 list(cleaned[0]),
-                settings["master_columns"],
+                [
+                    *settings["master_columns"][:11],
+                    "Category",
+                    *settings["master_columns"][11:],
+                ],
             )
             second = run_import(period_2, temp_path / "master.csv", settings, temp_path / "out2")
             self.assertEqual((second.appended_rows, second.new_customers), (3, 1))
@@ -128,6 +136,112 @@ class PipelineTest(unittest.TestCase):
             with (temp_path / "out2/new_customers.csv").open() as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual([row["Customer ID"] for row in rows], ["1003"])
+
+    def test_cleaned_export_labels_each_service_category(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        contents = categorized_csv_bytes([
+            {
+                "Customer ID": "p-1",
+                "Invoice Business Unit": "Plumbing Service",
+            },
+            {
+                "Customer ID": "h-1",
+                "Invoice Business Unit": "HVAC Maintenance",
+            },
+            {
+                "Customer ID": "r-1",
+                "Invoice Business Unit": "Restoration EMS",
+            },
+        ], settings)
+
+        rows = list(csv.DictReader(io.StringIO(contents.decode("utf-8"))))
+
+        self.assertEqual(
+            [row["Category"] for row in rows],
+            ["Plumbing", "HVAC", "Restoration"],
+        )
+
+    def test_legacy_cleaned_export_gains_service_category_once(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        legacy = csv_bytes([{
+            "Customer ID": "h-1",
+            "Created Date": "2026-09-21",
+            "Invoice Business Unit": "HVAC Service",
+            "Job Type": "Repair",
+        }], settings["master_columns"])
+
+        upgraded = ensure_categorized_csv_bytes(legacy, settings)
+        unchanged = ensure_categorized_csv_bytes(upgraded, settings)
+        row = next(csv.DictReader(io.StringIO(upgraded.decode("utf-8"))))
+
+        self.assertEqual(row["Category"], "HVAC")
+        self.assertEqual(unchanged, upgraded)
+
+    def test_period_new_leads_workbook_matches_reference_layout(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        contents = period_new_leads_xlsx_bytes([
+            {
+                "Customer ID": "p-1",
+                "Created Date": "2026-09-21",
+                "Invoice Business Unit": "Plumbing Service",
+                "Job Type": "Early repair",
+            },
+            {
+                "Customer ID": "h-1",
+                "Created Date": "2026-10-04",
+                "Invoice Business Unit": "HVAC Service",
+                "Job Type": "Maintenance",
+            },
+            {
+                "Customer ID": "same-day",
+                "Created Date": "2026-09-30",
+                "Invoice Business Unit": "Plumbing Service",
+                "Job Type": "Plumbing estimate",
+            },
+            {
+                "Customer ID": "existing",
+                "Created Date": "2026-09-20",
+                "Invoice Business Unit": "HVAC Service",
+                "Job Type": "Original job",
+            },
+        ], date(2026, 9, 21), date(2026, 10, 4), settings)
+
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(io.BytesIO(contents), read_only=False)
+        self.assertEqual(workbook.sheetnames, ["Plumbing", "HVAC"])
+        self.assertEqual(workbook["Plumbing"].max_row, 3)
+        self.assertEqual(workbook["HVAC"].max_row, 2)
+        self.assertEqual(workbook["Plumbing"]["L1"].value, "Category")
+        self.assertEqual(workbook["Plumbing"]["L2"].value, "Plumbing")
+        self.assertEqual(workbook["HVAC"]["L2"].value, "HVAC")
+        hvac_ids = {
+            str(workbook["HVAC"].cell(row, 1).value)
+            for row in range(2, workbook["HVAC"].max_row + 1)
+        }
+        self.assertEqual(hvac_ids, {"h-1"})
+        self.assertEqual(workbook["HVAC"]["B2"].value.date(), date(2026, 10, 4))
+        plumbing_ids = {
+            str(workbook["Plumbing"].cell(row, 1).value)
+            for row in range(2, workbook["Plumbing"].max_row + 1)
+        }
+        self.assertEqual(plumbing_ids, {"p-1", "same-day"})
+        self.assertEqual(list(workbook["Plumbing"].tables), ["Table1"])
+        self.assertEqual(list(workbook["HVAC"].tables), ["Table2"])
+
+    def test_period_new_leads_workbook_preserves_leading_zero_customer_ids(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        contents = period_new_leads_xlsx_bytes([{
+            "Customer ID": "00123",
+            "Created Date": "2026-09-21",
+            "Invoice Business Unit": "HVAC Service",
+            "Job Type": "Repair",
+        }], date(2026, 9, 21), date(2026, 9, 21), settings)
+
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(io.BytesIO(contents), read_only=False)
+        self.assertEqual(workbook["HVAC"]["A2"].value, "00123")
 
     def test_period_comparisons_are_split_into_hvac_and_plumbing(self):
         settings = load_settings(PROJECT / "config/settings.json")
@@ -184,6 +298,7 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(comparisons["HVAC"][0]["Records"], 3)
         self.assertEqual(comparisons["Plumbing"][0]["Records"], 2)
         self.assertEqual(comparisons["HVAC"][0]["New Customers"], 1)
+        self.assertEqual(comparisons["Plumbing"][0]["New Customers"], 2)
         self.assertEqual(comparisons["HVAC"][0]["Unique Customers"], 3)
         self.assertEqual(comparisons["Plumbing"][0]["Unique Customers"], 2)
         self.assertEqual(comparisons["HVAC"][0]["Revenue"], "250")
@@ -246,8 +361,8 @@ class PipelineTest(unittest.TestCase):
         settings = load_settings(PROJECT / "config/settings.json")
         master_rows = []
         for category, current, previous, last_year in [
-            ("HVAC Service", 78, 126, 34),
-            ("Plumbing", 333, 312, 358),
+            ("HVAC Service", 333, 312, 358),
+            ("Plumbing", 78, 126, 34),
         ]:
             for period_date, count in [
                 ("09/21/2026", current),
@@ -271,13 +386,15 @@ class PipelineTest(unittest.TestCase):
             master_rows, date(2026, 9, 21), date(2026, 10, 4), settings
         )
 
+        self.assertEqual(comparisons["Plumbing"][0]["New Customers"], 78)
+        self.assertEqual(comparisons["HVAC"][0]["New Customers"], 333)
         self.assertEqual(
             [row["New Customer Gain/Loss"] for row in comparisons["HVAC"]],
-            ["—", "-38.1%", "+129.4%"],
+            ["—", "+6.7%", "-7.0%"],
         )
         self.assertEqual(
             [row["New Customer Gain/Loss"] for row in comparisons["Plumbing"]],
-            ["—", "+6.7%", "-7.0%"],
+            ["—", "-38.1%", "+129.4%"],
         )
 
     def test_new_customer_gain_loss_is_unavailable_for_zero_comparison(self):
@@ -354,6 +471,26 @@ class PipelineTest(unittest.TestCase):
 
         self.assertEqual(forward, [opportunity])
         self.assertEqual(reverse, [opportunity])
+
+    def test_first_seen_rebuild_uses_earliest_job_and_hvac_same_day_ties(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        rows = [
+            {"Customer ID": "earlier-plumbing", "Created Date": "09/23/2026", "Invoice Business Unit": "Plumbing Service", "Opportunity": "True"},
+            {"Customer ID": "earlier-plumbing", "Created Date": "09/24/2026", "Invoice Business Unit": "HVAC Service", "Opportunity": "True"},
+            {"Customer ID": "same-day-hvac", "Created Date": "09/28/2026", "Invoice Business Unit": "Plumbing Service", "Opportunity": "True"},
+            {"Customer ID": "same-day-hvac", "Created Date": "09/28/2026", "Invoice Business Unit": "HVAC Service", "Opportunity": "True"},
+            {"Customer ID": "restoration-first", "Created Date": "09/22/2026", "Invoice Business Unit": "Restoration EMS", "Opportunity": "True"},
+            {"Customer ID": "restoration-first", "Created Date": "09/23/2026", "Invoice Business Unit": "Plumbing Service", "Opportunity": "True"},
+        ]
+
+        rebuilt = first_seen_customer_rows(rows, settings)
+        categories = {
+            row["Customer ID"]: row["Invoice Business Unit"] for row in rebuilt
+        }
+
+        self.assertEqual(categories["earlier-plumbing"], "Plumbing Service")
+        self.assertEqual(categories["same-day-hvac"], "HVAC Service")
+        self.assertEqual(categories["restoration-first"], "Restoration EMS")
 
     def test_analysis_csv_starts_with_category_period_sections(self):
         comparisons = {
