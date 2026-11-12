@@ -214,7 +214,7 @@ class AppWorkflowTest(unittest.TestCase):
         self.assertEqual(len(charts), 2)
         for chart in charts:
             spec = json.loads(chart.proto.spec)
-            self.assertEqual(spec["encoding"]["x"]["scale"]["domain"], [0, 54])
+            self.assertEqual(spec["encoding"]["x"]["scale"]["domain"], [1, 52])
             self.assertNotIn("params", spec)
             self.assertNotIn("selection", spec)
 

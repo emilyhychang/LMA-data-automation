@@ -887,7 +887,7 @@ def weekly_opportunity_ytd(
     settings: dict[str, Any],
     job_statuses: set[str] | None = None,
 ) -> tuple[list[dict[str, int | None]], tuple[int, int] | None]:
-    """Return weekly nonblank-opportunity counts for the latest and prior year."""
+    """Return weeks 1–52 of opportunity counts for the latest and prior year."""
 
     dated_rows = [
         (row, day)
@@ -902,16 +902,18 @@ def weekly_opportunity_ytd(
     latest_current_day = max(
         day for _, day in dated_rows if day.isocalendar().year == current_year
     )
-    last_week = latest_current_day.isocalendar().week
+    last_week = min(latest_current_day.isocalendar().week, 52)
     counts = {
         current_year: {week: 0 for week in range(1, last_week + 1)},
-        previous_year: {week: 0 for week in range(1, 54)},
+        previous_year: {week: 0 for week in range(1, 53)},
     }
     category_map = invoice_category_mapping(settings)
 
     for row, day in dated_rows:
         week_year, week, _ = day.isocalendar()
         if week_year not in counts:
+            continue
+        if week > 52:
             continue
         if week_year == current_year and week > last_week:
             continue
@@ -933,7 +935,7 @@ def weekly_opportunity_ytd(
                 counts[current_year][week] if week <= last_week else None
             ),
         }
-        for week in range(1, 54)
+        for week in range(1, 53)
     ]
     return chart_rows, (previous_year, current_year)
 

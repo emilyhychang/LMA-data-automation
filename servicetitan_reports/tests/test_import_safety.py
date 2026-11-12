@@ -129,13 +129,13 @@ class ImportSafetyTest(unittest.TestCase):
         result = run_uploaded_import(incoming, self.csv([]), self.settings, allow_group_replacement=True)
         self.assertEqual(result.appended_rows, 2)
 
-    def test_iso_week_53_and_new_year_are_not_dropped_or_misassigned(self):
+    def test_iso_week_53_is_excluded_and_new_year_is_not_misassigned(self):
         rows = [{**self.row, "Created Date": day} for day in ("2020-12-31", "2021-01-01", "2021-01-04")]
         chart, years = weekly_opportunity_ytd(rows, "HVAC", self.settings)
         self.assertEqual(years, (2020, 2021))
-        self.assertEqual(chart[-1], {"Week": 53, "2020": 2, "2021": None})
+        self.assertEqual(chart[-1], {"Week": 52, "2020": 0, "2021": None})
         self.assertEqual(chart[0]["2021"], 1)
-        self.assertEqual(sum(row["2020"] for row in chart), 2)
+        self.assertEqual(sum(row["2020"] for row in chart), 0)
 
     def test_history_has_no_default_limit_and_keeps_missing_output_entries(self):
         store, cursor = self.store([])

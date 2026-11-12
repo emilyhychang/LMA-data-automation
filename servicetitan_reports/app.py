@@ -703,7 +703,7 @@ if dashboard and dashboard['has_rows']:
     st.subheader("Weekly opportunities — YTD")
     st.caption(
         "Count of nonblank Opportunity values for each customer's first master "
-        "record. Weeks and year labels use the ISO week calendar, including week 53."
+        "record. Weeks and year labels use the ISO week calendar; charts end at week 52."
     )
     available_statuses = sorted({
         row["Job Status"] for row in derived_lead_rows if row.get("Job Status")
@@ -725,7 +725,8 @@ if dashboard and dashboard['has_rows']:
                     "transform": [{"fold": [str(years[0]), str(years[1])], "as": ["Year", "Opportunities"]}],
                     "mark": "line",
                     "encoding": {
-                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [0, 54], "nice": False}, "axis": {"title": "ISO week"}},                        "y": {"field": "Opportunities", "type": "quantitative"},
+                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [1, 52], "nice": False}, "axis": {"title": "ISO week"}},
+                        "y": {"field": "Opportunities", "type": "quantitative"},
                         "color": {"field": "Year", "type": "nominal"},
                         "tooltip": [{"field": "Week"}, {"field": "Year"}, {"field": "Opportunities"}],
                     },
