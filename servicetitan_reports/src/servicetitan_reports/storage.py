@@ -26,7 +26,6 @@ from .pipeline import (
 
 
 LOCK_KEY = 4_812_291
-STORAGE_API_VERSION = 2
 MAP_TRACKING_SCHEMA = """
     CREATE TABLE IF NOT EXISTS lma_private.map_refresh_state (
         singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),

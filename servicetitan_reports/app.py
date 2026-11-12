@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import hashlib
 import json
 import sys
@@ -16,13 +15,6 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from servicetitan_reports import pipeline as pipeline_module  # noqa: E402
-
-# Streamlit can rerun this file while retaining an older imported pipeline
-# module. Reload it before importing helpers added by a code update.
-if getattr(pipeline_module, "PIPELINE_API_VERSION", 0) < 2:
-    pipeline_module = importlib.reload(pipeline_module)
-
 from servicetitan_reports.pipeline import (  # noqa: E402
     PERIOD_COMPARISON_COLUMNS,
     category_period_comparisons,
@@ -31,25 +23,15 @@ from servicetitan_reports.pipeline import (  # noqa: E402
     period_new_leads_xlsx_bytes,
     read_and_clean_csv_bytes,
 )
-from servicetitan_reports import storage as storage_module  # noqa: E402
+from servicetitan_reports.storage import (  # noqa: E402
+    DatasetStatus,
+    PersistentDatasetStore,
+)
 from servicetitan_reports.startup import open_dataset_store, StorageStartupError  # noqa: E402
 from servicetitan_reports.workflow import latest_dashboard, imported_dashboard, weekly_charts  # noqa: E402
 from servicetitan_reports.zip_maps import (  # noqa: E402
     publish_zip_summaries,
 )
-
-# Streamlit can rerun this file while retaining an older imported module.
-history_fields = storage_module.ImportHistoryEntry.__dataclass_fields__
-if (
-    "master_csv" not in history_fields
-    or "new_leads_csv" not in history_fields
-    or not hasattr(storage_module.PersistentDatasetStore, "history_snapshots")
-    or not hasattr(storage_module.PersistentDatasetStore, "startup_status")
-    or getattr(storage_module, "STORAGE_API_VERSION", 0) < 2
-):
-    storage_module = importlib.reload(storage_module)
-PersistentDatasetStore = storage_module.PersistentDatasetStore
-
 
 SETTINGS = load_settings(ROOT / "config" / "settings.json")
 CURRENT_UPLOAD_REPORT = "__current_upload__"
@@ -335,7 +317,11 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
         st.session_state["show_current_upload"] = True
         st.session_state["saved_report_id"] = CURRENT_UPLOAD_REPORT
         st.session_state["loaded_report_id"] = CURRENT_UPLOAD_REPORT
-        imported_status = storage_module.DatasetStatus(result.dataset_version, datetime.now(ZoneInfo('UTC')), email)
+        imported_status = DatasetStatus(
+            result.dataset_version,
+            datetime.now(ZoneInfo("UTC")),
+            email,
+        )
         imported_dashboard(workflow_cache, result, imported_status)
         try:
             dataset_status = store.status()

@@ -34,7 +34,6 @@ MONTH_NAMES = (
 )
 
 SERVICE_CATEGORY_COLUMN = "Category"
-PIPELINE_API_VERSION = 2
 
 
 @dataclass(frozen=True)
