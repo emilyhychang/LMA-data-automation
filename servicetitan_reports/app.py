@@ -152,18 +152,12 @@ def refresh_zip_map_sources(result) -> str | None:
     return generated_at
 
 
-def render_zip_ranking(rows, metric) -> None:
+def render_zip_ranking(rows) -> None:
     if not rows:
         st.info("No ZIP data is available.")
         return
 
-    st.dataframe(
-        rows[:20],
-        column_order=("Zip", metric),
-        hide_index=True,
-        height=430,
-        alt=f"Top ZIP codes by {metric.casefold()}",
-    )
+    st.text("\n".join(str(row["Zip"]) for row in rows[:20]))
 
 
 def refreshed_embed_url(url: str, report_key: tuple, refreshed_at: object) -> str:
@@ -674,7 +668,7 @@ if dashboard and dashboard['has_rows']:
         st.write("**New leads**")
         leads_list, leads_map = st.columns([1, 8], gap="small")
         with leads_list:
-            render_zip_ranking(zip_new_lead_rows, "New leads")
+            render_zip_ranking(zip_new_lead_rows)
         with leads_map:
             if leads_embed_url:
                 st.iframe(
@@ -689,7 +683,7 @@ if dashboard and dashboard['has_rows']:
         st.write("**Revenue**")
         revenue_list, revenue_map = st.columns([1, 8], gap="small")
         with revenue_list:
-            render_zip_ranking(zip_revenue_rows, "Revenue")
+            render_zip_ranking(zip_revenue_rows)
         with revenue_map:
             if revenue_embed_url:
                 st.iframe(
@@ -725,7 +719,12 @@ if dashboard and dashboard['has_rows']:
                     "transform": [{"fold": [str(years[0]), str(years[1])], "as": ["Year", "Opportunities"]}],
                     "mark": "line",
                     "encoding": {
-                        "x": {"field": "Week", "type": "quantitative", "scale": {"domain": [1, 52], "nice": False}, "axis": {"title": "ISO week"}},
+                        "x": {
+                            "field": "Week",
+                            "type": "quantitative",
+                            "scale": {"domain": [0.5, 52.5], "nice": False},
+                            "axis": {"title": "ISO week", "values": list(range(1, 53))},
+                        },
                         "y": {"field": "Opportunities", "type": "quantitative"},
                         "color": {"field": "Year", "type": "nominal"},
                         "tooltip": [{"field": "Week"}, {"field": "Year"}, {"field": "Opportunities"}],

@@ -140,7 +140,7 @@ class AppWorkflowTest(unittest.TestCase):
             for button in self.at.get('download_button')
         ))
 
-    def test_top_twenty_rankings_have_values_and_refresh_does_not_import(self):
+    def test_top_twenty_rankings_show_only_zip_lists_and_refresh_does_not_import(self):
         rows = [{'Customer ID': str(i), 'Created Date': '2026-09-21',
                  'Invoice Business Unit': 'HVAC Service', 'Job Type': 'Repair',
                  'Location Zip': f'{i:05d}', 'Total': str(i), 'Opportunity': 'True'} for i in range(1, 23)]
@@ -151,13 +151,11 @@ class AppWorkflowTest(unittest.TestCase):
         save = self.stack.enter_context(patch.object(PersistentDatasetStore, 'import_report'))
         self.at.run()
         self.assertFalse(self.at.exception)
-        tables = [table.value for table in self.at.dataframe]
-        self.assertEqual(len(tables), 2)
-        self.assertTrue(all(len(table) == 20 for table in tables))
-        self.assertEqual(tables[0].iloc[0]['Zip'], '00001')
-        self.assertEqual(tables[0].iloc[0]['New leads'], 1)
-        self.assertEqual(tables[1].iloc[0]['Zip'], '00022')
-        self.assertEqual(tables[1].iloc[0]['Revenue'], 22)
+        zip_lists = [element.value.splitlines() for element in self.at.text]
+        self.assertEqual(len(zip_lists), 2)
+        self.assertTrue(all(len(zip_list) == 20 for zip_list in zip_lists))
+        self.assertEqual(zip_lists[0][0], '00001')
+        self.assertEqual(zip_lists[1][0], '00022')
         next(button for button in self.at.button if button.label == 'Refresh map sources').click().run()
         refresh.assert_called_once()
         save.assert_not_called()
@@ -214,7 +212,8 @@ class AppWorkflowTest(unittest.TestCase):
         self.assertEqual(len(charts), 2)
         for chart in charts:
             spec = json.loads(chart.proto.spec)
-            self.assertEqual(spec["encoding"]["x"]["scale"]["domain"], [1, 52])
+            self.assertEqual(spec["encoding"]["x"]["scale"]["domain"], [0.5, 52.5])
+            self.assertEqual(spec["encoding"]["x"]["axis"]["values"], list(range(1, 53)))
             self.assertNotIn("params", spec)
             self.assertNotIn("selection", spec)
 
