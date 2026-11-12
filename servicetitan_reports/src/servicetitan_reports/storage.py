@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from .pipeline import (
     UploadedImportResult,
     csv_bytes,
+    extend_new_leads_master,
     first_seen_customer_rows,
     read_and_clean_csv_bytes,
     row_snapshot,
@@ -26,6 +27,8 @@ from .pipeline import (
 
 
 LOCK_KEY = 4_812_291
+DUPLICATE_UPLOADS_REPROCESS = True
+NEW_LEADS_MASTER_HEATMAPS = True
 MAP_TRACKING_SCHEMA = """
     CREATE TABLE IF NOT EXISTS lma_private.map_refresh_state (
         singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
@@ -393,7 +396,9 @@ class PersistentDatasetStore:
                        log.new_customers, outputs.cleaned_csv, outputs.analysis_csv,
                        CASE WHEN log.dataset_version = %s THEN NULL ELSE
                            COALESCE(backup.master_csv,
-                           CASE WHEN state.version = log.dataset_version THEN state.master_csv END) END
+                           CASE WHEN state.version = log.dataset_version THEN state.master_csv END) END,
+                       COALESCE(backup.new_leads_csv,
+                           CASE WHEN state.version = log.dataset_version THEN state.new_leads_csv END)
                 FROM lma_private.import_log log
                 LEFT JOIN lma_private.import_outputs outputs ON outputs.dataset_version = log.dataset_version
                 LEFT JOIN lma_private.dataset_backups backup ON backup.version = log.dataset_version
@@ -403,10 +408,11 @@ class PersistentDatasetStore:
             row = cursor.fetchone()
         if row is None:
             raise ValueError("This report is no longer listed. Select another report.")
-        version, name, valid, added, updated, unchanged, customers, cleaned, original, master = row
+        version, name, valid, added, updated, unchanged, customers, cleaned, original, master, lead_master = row
         cleaned = _uncompressed(cleaned) if cleaned is not None else None
         original = _uncompressed(original) if original is not None else None
         master = _uncompressed(master) if master is not None else None
+        lead_master = _uncompressed(lead_master) if lead_master is not None else None
         cached_rows = None
         if cached_snapshot and cached_snapshot[0] == version:
             _, master, cached_rows = cached_snapshot
@@ -416,12 +422,22 @@ class PersistentDatasetStore:
         zip_year = None
         zip_revenue_rows = []
         zip_new_lead_rows = []
+        lead_rows = None
         if cleaned is not None:
             incoming = read_and_clean_csv_bytes(cleaned, self.settings, "Saved report")
             start, end = infer_period(incoming, self.settings)
             if master is not None:
                 master_rows = cached_rows if cached_rows is not None else read_and_clean_csv_bytes(master, self.settings, "Saved master")
-                lead_rows = first_seen_customer_rows(master_rows, self.settings)
+                lead_rows = (
+                    read_and_clean_csv_bytes(
+                        lead_master,
+                        self.settings,
+                        "Saved New Leads Master",
+                        allow_empty=True,
+                    )
+                    if lead_master is not None
+                    else first_seen_customer_rows(master_rows, self.settings)
+                )
                 comparisons = category_period_comparisons(
                     master_rows, start, end, self.settings, lead_rows
                 )
@@ -441,6 +457,7 @@ class PersistentDatasetStore:
             category_comparisons=comparisons, removed_rows=0, zip_year=zip_year,
             zip_revenue_rows=zip_revenue_rows,
             zip_new_lead_rows=zip_new_lead_rows,
+            new_leads_csv=lead_master, new_lead_rows=lead_rows if master is not None else None,
         )
 
     def map_status(self, *, allow_setup=False):
@@ -473,9 +490,10 @@ class PersistentDatasetStore:
             cursor.execute("SET LOCAL lock_timeout = '5s'")
             cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
             cursor.execute("SELECT attempt_version FROM lma_private.map_refresh_state LIMIT 0")
-            cursor.execute("SELECT version, CASE WHEN version = %s THEN NULL ELSE master_csv END FROM lma_private.dataset_state WHERE singleton = true",
-                           (getattr(prepared, 'dataset_version', None),))
-            version, compressed_master = cursor.fetchone()
+            cursor.execute("SELECT version, CASE WHEN version = %s THEN NULL ELSE master_csv END, CASE WHEN version = %s THEN NULL ELSE new_leads_csv END FROM lma_private.dataset_state WHERE singleton = true",
+                           (getattr(prepared, 'dataset_version', None),
+                            getattr(prepared, 'dataset_version', None)))
+            version, compressed_master, compressed_leads = cursor.fetchone()
             target_version = version
             error = refreshed_at = None
             try:
@@ -493,7 +511,13 @@ class PersistentDatasetStore:
                     target_version = getattr(prepared, "dataset_version", None) or version
                 else:
                     rows = read_and_clean_csv_bytes(_uncompressed(compressed_master), self.settings, "Master")
-                    year, revenue, leads = zip_code_summaries(rows, first_seen_customer_rows(rows, self.settings), self.settings)
+                    lead_rows = read_and_clean_csv_bytes(
+                        _uncompressed(compressed_leads),
+                        self.settings,
+                        "New Leads Master",
+                        allow_empty=True,
+                    )
+                    year, revenue, leads = zip_code_summaries(rows, lead_rows, self.settings)
                     payload = SimpleNamespace(zip_year=year, zip_revenue_rows=revenue, zip_new_lead_rows=leads)
                 refreshed_at = publish(payload)
                 if not refreshed_at:
@@ -628,15 +652,6 @@ class PersistentDatasetStore:
         content_hash = hashlib.sha256(source_contents).hexdigest()
         with self.connect() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
-            # Generated outputs survive history-list deletion. Check those too so
-            # hiding a listing does not allow an old upload to overwrite corrections.
-            cursor.execute("""
-                SELECT 1 FROM lma_private.import_log WHERE content_hash = %s
-                UNION ALL
-                SELECT 1 FROM lma_private.import_outputs WHERE cleaned_csv = %s
-                LIMIT 1
-            """, (content_hash, _compressed(csv_bytes(cleaned_rows, self.settings["master_columns"]))))
-            is_duplicate_upload = bool(cursor.fetchone())
             cursor.execute("""
                 SELECT version, master_csv, new_leads_csv
                 FROM lma_private.dataset_state
@@ -656,12 +671,41 @@ class PersistentDatasetStore:
                 allow_group_replacement=allow_correction,
                 cleaned_rows=cleaned_rows,
             )
-            if is_duplicate_upload and not allow_correction:
-                return replace(
-                    result,
-                    dataset_version=version,
-                    source_name=source_name,
-                )
+            stored_lead_rows = read_and_clean_csv_bytes(
+                _uncompressed(stored_leads),
+                self.settings,
+                "New Leads Master",
+                allow_empty=True,
+            )
+            authoritative_leads = extend_new_leads_master(
+                stored_lead_rows,
+                result.new_lead_rows or [],
+                self.settings,
+            )
+            final_master_rows = read_and_clean_csv_bytes(
+                result.master_csv,
+                self.settings,
+                "Updated master",
+                allow_empty=True,
+            )
+            from .zip_maps import zip_code_summaries
+            zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
+                final_master_rows,
+                authoritative_leads,
+                self.settings,
+                result.period_start,
+                result.period_end,
+            )
+            result = replace(
+                result,
+                new_leads_csv=csv_bytes(
+                    authoritative_leads, self.settings["master_columns"]
+                ),
+                new_lead_rows=authoritative_leads,
+                zip_year=zip_year,
+                zip_revenue_rows=zip_revenue_rows,
+                zip_new_lead_rows=zip_new_lead_rows,
+            )
             if result.appended_rows == 0 and result.updated_rows == 0 and result.removed_rows == 0:
                 return replace(
                     result,

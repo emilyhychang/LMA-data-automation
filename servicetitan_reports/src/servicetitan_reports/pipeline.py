@@ -493,6 +493,25 @@ def first_seen_customer_rows(
     ]
 
 
+def extend_new_leads_master(
+    stored_rows: list[dict[str, str]],
+    candidate_rows: list[dict[str, str]],
+    settings: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Preserve the saved New Leads Master and append unseen customers only."""
+
+    authoritative_rows = first_seen_customer_rows(stored_rows, settings)
+    customer_ids = {
+        clean_text(row.get("Customer ID", "")) for row in authoritative_rows
+    }
+    for row in first_seen_customer_rows(candidate_rows, settings):
+        customer_id = clean_text(row.get("Customer ID", ""))
+        if customer_id and customer_id not in customer_ids:
+            authoritative_rows.append(row)
+            customer_ids.add(customer_id)
+    return first_seen_customer_rows(authoritative_rows, settings)
+
+
 def row_identity(
     row: dict[str, str],
     settings: dict[str, Any],

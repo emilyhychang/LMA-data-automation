@@ -1,5 +1,5 @@
 """Bounded, browser-session-owned reuse of immutable dataset versions."""
-from .pipeline import read_and_clean_csv_bytes, first_seen_customer_rows, weekly_opportunity_ytd
+from .pipeline import read_and_clean_csv_bytes, weekly_opportunity_ytd
 from .zip_maps import zip_code_summaries
 
 
@@ -9,7 +9,9 @@ def latest_dashboard(cache, store, status, settings):
         return existing, None
     master, leads, actual_status = store.downloads()
     rows = read_and_clean_csv_bytes(master, settings, 'Master dataset', allow_empty=True)
-    lead_rows = first_seen_customer_rows(rows, settings)
+    lead_rows = read_and_clean_csv_bytes(
+        leads, settings, 'New Leads Master', allow_empty=True
+    )
     dashboard = dict(master=master, leads=leads, status=actual_status,
                      lead_rows=lead_rows, zip_summary=zip_code_summaries(rows, lead_rows, settings),
                      has_rows=bool(rows))

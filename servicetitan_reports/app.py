@@ -39,6 +39,8 @@ if (
     or "new_leads_csv" not in history_fields
     or not hasattr(storage_module.PersistentDatasetStore, "history_snapshots")
     or not hasattr(storage_module.PersistentDatasetStore, "startup_status")
+    or not getattr(storage_module, "DUPLICATE_UPLOADS_REPROCESS", False)
+    or not getattr(storage_module, "NEW_LEADS_MASTER_HEATMAPS", False)
 ):
     storage_module = importlib.reload(storage_module)
 PersistentDatasetStore = storage_module.PersistentDatasetStore
@@ -263,9 +265,19 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
             store.refresh_maps(refresh_zip_map_sources, prepared=result)
         except Exception:
             st.warning("The report was saved, but map refresh could not complete. Use Refresh map sources below.")
-        st.success(
-            "Both shared datasets were saved. A backup of the prior version was retained."
-        )
+        if (
+            result.appended_rows == 0
+            and result.updated_rows == 0
+            and result.removed_rows == 0
+        ):
+            st.success(
+                "Report reprocessed successfully. The shared datasets already matched, "
+                "so no duplicate rows were added."
+            )
+        else:
+            st.success(
+                "Both shared datasets were saved. A backup of the prior version was retained."
+            )
     except ValueError as error:
         st.error(f"Nothing was saved: {error}")
     except Exception:

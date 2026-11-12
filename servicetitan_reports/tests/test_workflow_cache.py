@@ -45,6 +45,24 @@ class WorkflowCacheTest(unittest.TestCase):
         latest_dashboard(cache, store, later, self.settings)
         store.downloads.assert_called_once()
 
+    def test_dashboard_zip_heatmap_uses_saved_new_leads_master(self):
+        saved_leads = csv_bytes([{
+            'Customer ID': '1',
+            'Created Date': '2026-09-21',
+            'Invoice Business Unit': 'HVAC Service',
+            'Job Type': 'Repair',
+            'Location Zip': '92037',
+        }], self.settings['master_columns'])
+        store = MagicMock()
+        store.downloads.return_value = (self.master, saved_leads, self.status)
+
+        dashboard, _ = latest_dashboard({}, store, self.status, self.settings)
+
+        self.assertEqual(
+            dashboard['zip_summary'][2],
+            [{'Zip': '92037', 'New leads': 1}],
+        )
+
     def test_import_result_primes_dashboard_without_download_or_reparse(self):
         result = run_uploaded_import(self.master, csv_bytes([], self.settings['master_columns']), self.settings)
         cache, store = {}, MagicMock()
@@ -80,10 +98,13 @@ class WorkflowCacheTest(unittest.TestCase):
         store = PersistentDatasetStore('unused', self.settings, connect=lambda _: connection)
         result = replace(run_uploaded_import(self.master, csv_bytes([], self.settings['master_columns']), self.settings), dataset_version=35)
         publish = MagicMock(return_value='2026-10-29T12:00:00Z')
-        cursor.fetchone.side_effect = [(35, None), (35, 35, 'time', None)]
+        cursor.fetchone.side_effect = [(35, None, None), (35, 35, 'time', None)]
         store.refresh_maps(publish, prepared=result)
         self.assertIs(publish.call_args.args[0], result)
-        cursor.fetchone.side_effect = [(36, _compressed(self.master)), (36, 36, 'time', None)]
+        cursor.fetchone.side_effect = [
+            (36, _compressed(self.master), _compressed(self.master)),
+            (36, 36, 'time', None),
+        ]
         store.refresh_maps(publish, prepared=result)
         self.assertIsNot(publish.call_args.args[0], result)
 
@@ -102,7 +123,7 @@ class WorkflowCacheTest(unittest.TestCase):
         )
         publish = MagicMock(return_value='2026-11-05T10:00:00-08:00')
         cursor.fetchone.side_effect = [
-            (36, _compressed(self.master)),
+            (36, _compressed(self.master), _compressed(self.master)),
             (35, 35, 'time', None),
         ]
 

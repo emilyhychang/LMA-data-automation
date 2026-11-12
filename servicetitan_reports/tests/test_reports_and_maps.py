@@ -28,7 +28,9 @@ class ReportsAndMapsTest(unittest.TestCase):
     def saved_row(self, master=True, cleaned=True):
         return (35, 'report.csv', 2, 1, 0, 1, 1,
                 _compressed(self.cleaned) if cleaned else None,
-                _compressed(b'original analysis'), _compressed(self.master) if master else None)
+                _compressed(b'original analysis'),
+                _compressed(self.master) if master else None,
+                _compressed(self.cleaned) if master else None)
 
     def test_restore_preserves_original_metrics_and_regenerates_from_snapshot(self):
         self.cursor.fetchone.return_value = self.saved_row()
@@ -56,7 +58,10 @@ class ReportsAndMapsTest(unittest.TestCase):
         self.assertIsNone(result.analysis_csv)
 
     def test_refresh_uses_locked_current_version_and_saves_success(self):
-        self.cursor.fetchone.side_effect = [(36, _compressed(self.master)), (36, 36, 'timestamp', None)]
+        self.cursor.fetchone.side_effect = [
+            (36, _compressed(self.master), _compressed(self.cleaned)),
+            (36, 36, 'timestamp', None),
+        ]
         publish = MagicMock(return_value='2026-10-29T12:00:00-07:00')
         status = self.store.refresh_maps(publish)
         self.assertEqual(status['success_version'], 36)
@@ -68,7 +73,10 @@ class ReportsAndMapsTest(unittest.TestCase):
         self.assertFalse(any('UPDATE lma_private.dataset_state' in statement for statement in sql))
 
     def test_partial_or_failed_refresh_is_persisted_without_false_success(self):
-        self.cursor.fetchone.side_effect = [(36, _compressed(self.master)), (36, 35, 'old timestamp', 'failed')]
+        self.cursor.fetchone.side_effect = [
+            (36, _compressed(self.master), _compressed(self.cleaned)),
+            (36, 35, 'old timestamp', 'failed'),
+        ]
         publish = MagicMock(side_effect=PermissionError('secret credential must not leak'))
         result = self.store.refresh_maps(publish)
         params = self.cursor.execute.call_args.args[1]

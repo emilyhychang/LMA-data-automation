@@ -25,8 +25,11 @@ class ImportSafetyTest(unittest.TestCase):
     def store(self, master, *, repeat=False):
         connection = MagicMock()
         cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
-        cursor.fetchone.side_effect = [(1,) if repeat else None,
-                                       (35, _compressed(self.csv(master)), _compressed(b"leads"))]
+        cursor.fetchone.return_value = (
+            35,
+            _compressed(self.csv(master)),
+            _compressed(self.csv(master)),
+        )
         store = PersistentDatasetStore("unused", self.settings, connect=lambda _: connection)
         return store, cursor
 
@@ -50,19 +53,46 @@ class ImportSafetyTest(unittest.TestCase):
             store.import_report(self.csv([{**self.row, "Created Date": "bad"}]), "bad.csv", "test")
         connect.assert_not_called()
 
-    def test_exact_repeat_is_checked_under_lock_without_writes(self):
+    def test_exact_repeat_is_reprocessed_under_lock_without_duplicate_writes(self):
         store, cursor = self.store([self.row], repeat=True)
-        with self.assertRaisesRegex(ValueError, "already saved"):
-            store.import_report(self.csv([self.row]), "renamed.csv", "test")
+        result = store.import_report(self.csv([self.row]), "renamed.csv", "test")
+        self.assertEqual(result.dataset_version, 35)
+        self.assertEqual(result.skipped_duplicate_rows, 1)
         statements = [call.args[0] for call in cursor.execute.call_args_list]
         self.assertIn("pg_advisory_xact_lock", statements[0])
         self.assertTrue(all(statement.lstrip().startswith("SELECT") for statement in statements))
 
     def test_equivalent_upload_noop_creates_no_backup_or_version(self):
         store, cursor = self.store([self.row])
-        with self.assertRaisesRegex(ValueError, "already match"):
-            store.import_report(self.csv([self.row]), "different-format.csv", "test")
+        result = store.import_report(
+            self.csv([self.row]), "different-format.csv", "test"
+        )
+        self.assertEqual(result.dataset_version, 35)
+        self.assertEqual(result.skipped_duplicate_rows, 1)
         self.assertTrue(all(call.args[0].lstrip().startswith("SELECT") for call in cursor.execute.call_args_list))
+
+    def test_exact_rerun_uses_saved_new_leads_master_for_zip_heatmap(self):
+        connection = MagicMock()
+        cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        master_row = {**self.row, "Location Zip": "92109"}
+        saved_lead_row = {**self.row, "Location Zip": "92037"}
+        cursor.fetchone.return_value = (
+            35,
+            _compressed(self.csv([master_row])),
+            _compressed(self.csv([saved_lead_row])),
+        )
+        store = PersistentDatasetStore(
+            "unused", self.settings, connect=lambda _: connection
+        )
+
+        result = store.import_report(
+            self.csv([master_row]), "same-report.csv", "test"
+        )
+
+        self.assertEqual(
+            result.zip_new_lead_rows,
+            [{"Zip": "92037", "New leads": 1}],
+        )
 
     def test_explicit_correction_can_reapply_old_file_and_retains_all_history(self):
         store, cursor = self.store([{**self.row, "Total": "200"}], repeat=True)
