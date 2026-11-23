@@ -98,15 +98,49 @@ class WorkflowCacheTest(unittest.TestCase):
         store = PersistentDatasetStore('unused', self.settings, connect=lambda _: connection)
         result = replace(run_uploaded_import(self.master, csv_bytes([], self.settings['master_columns']), self.settings), dataset_version=35)
         publish = MagicMock(return_value='2026-10-29T12:00:00Z')
-        cursor.fetchone.side_effect = [(35, None, None), (35, 35, 'time', None)]
+        cursor.fetchone.side_effect = [
+            (35, None, None),
+            (35,),
+            (35, 35, 'time', None),
+        ]
         store.refresh_maps(publish, prepared=result)
         self.assertIs(publish.call_args.args[0], result)
         cursor.fetchone.side_effect = [
             (36, _compressed(self.master), _compressed(self.master)),
+            (36,),
             (36, 36, 'time', None),
         ]
         store.refresh_maps(publish, prepared=result)
         self.assertIsNot(publish.call_args.args[0], result)
+
+    def test_map_refresh_retries_if_import_advances_during_publication(self):
+        from dataclasses import replace
+        connection = MagicMock()
+        cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        store = PersistentDatasetStore('unused', self.settings, connect=lambda _: connection)
+        result = replace(
+            run_uploaded_import(
+                self.master,
+                csv_bytes([], self.settings['master_columns']),
+                self.settings,
+            ),
+            dataset_version=35,
+        )
+        publish = MagicMock(return_value='2026-10-29T12:00:00Z')
+        cursor.fetchone.side_effect = [
+            (35, None, None),
+            (36,),
+            (36, _compressed(self.master), _compressed(self.master)),
+            (36,),
+            (36, 36, 'time', None),
+        ]
+
+        status = store.refresh_maps(publish, prepared=result)
+
+        self.assertEqual(publish.call_count, 2)
+        self.assertIs(publish.call_args_list[0].args[0], result)
+        self.assertIsNot(publish.call_args_list[1].args[0], result)
+        self.assertEqual(status['success_version'], 36)
 
     def test_manual_map_refresh_can_publish_selected_historical_report(self):
         from dataclasses import replace

@@ -469,70 +469,148 @@ class PersistentDatasetStore:
         return dict(zip(("attempt_version", "success_version", "refreshed_at", "error"), row)) if row else None
 
     def refresh_maps(self, publish, *, prepared=None, allow_historical=False):
-        """Publish a committed report's map rows while holding the import lock.
+        """Publish map rows without holding a database lock during network I/O.
 
-        Automatic refreshes cannot let an older import result overwrite a newer
-        version. A manual refresh may explicitly publish a selected historical
-        report. Google failures are caught inside the transaction so the failure
-        status is committed. The two spreadsheets cannot be updated atomically.
+        Automatic refreshes retry if an import advances the dataset while Google
+        is being updated. Manual historical refreshes intentionally publish the
+        selected version. The two spreadsheets cannot be updated atomically.
         """
         from .zip_maps import zip_code_summaries, map_error_message
-        with self.connect() as connection, connection.cursor() as cursor:
-            cursor.execute("SET LOCAL lock_timeout = '5s'")
-            cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
-            cursor.execute("SELECT attempt_version FROM lma_private.map_refresh_state LIMIT 0")
-            cursor.execute("SELECT version, CASE WHEN version = %s THEN NULL ELSE master_csv END, CASE WHEN version = %s THEN NULL ELSE new_leads_csv END FROM lma_private.dataset_state WHERE singleton = true",
-                           (getattr(prepared, 'dataset_version', None),
-                            getattr(prepared, 'dataset_version', None)))
-            version, compressed_master, compressed_leads = cursor.fetchone()
+
+        def load_payload():
+            with self.connect() as connection, connection.cursor() as cursor:
+                cursor.execute("SET LOCAL statement_timeout = '15s'")
+                cursor.execute(
+                    "SELECT attempt_version "
+                    "FROM lma_private.map_refresh_state LIMIT 0"
+                )
+                cursor.execute("""
+                    SELECT version,
+                           CASE WHEN version = %s THEN NULL ELSE master_csv END,
+                           CASE WHEN version = %s THEN NULL ELSE new_leads_csv END
+                    FROM lma_private.dataset_state
+                    WHERE singleton = true
+                """, (
+                    getattr(prepared, "dataset_version", None),
+                    getattr(prepared, "dataset_version", None),
+                ))
+                state = cursor.fetchone()
+            if state is None:
+                raise ValueError("Shared datasets have not been initialized.")
+
+            version, compressed_master, compressed_leads = state
             target_version = version
+            prepared_is_usable = (
+                prepared is not None
+                and getattr(prepared, "zip_revenue_rows", None) is not None
+                and getattr(prepared, "zip_new_lead_rows", None) is not None
+                and (
+                    getattr(prepared, "dataset_version", None) == version
+                    or allow_historical
+                )
+            )
+            if prepared_is_usable:
+                payload = prepared
+                target_version = (
+                    getattr(prepared, "dataset_version", None) or version
+                )
+            else:
+                rows = read_canonical_csv_bytes(
+                    _uncompressed(compressed_master),
+                    self.settings,
+                    "Master",
+                )
+                lead_rows = read_canonical_csv_bytes(
+                    _uncompressed(compressed_leads),
+                    self.settings,
+                    "New Leads Master",
+                    allow_empty=True,
+                )
+                year, revenue, leads = zip_code_summaries(
+                    rows, lead_rows, self.settings
+                )
+                payload = SimpleNamespace(
+                    zip_year=year,
+                    zip_revenue_rows=revenue,
+                    zip_new_lead_rows=leads,
+                )
+            return target_version, payload
+
+        def save_status(target_version, refreshed_at, error, *, verify_current):
+            with self.connect() as connection, connection.cursor() as cursor:
+                cursor.execute("SET LOCAL lock_timeout = '5s'")
+                cursor.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+                if verify_current:
+                    cursor.execute("""
+                        SELECT version FROM lma_private.dataset_state
+                        WHERE singleton = true
+                    """)
+                    current = cursor.fetchone()
+                    if current is None:
+                        raise ValueError("Shared datasets have not been initialized.")
+                    if current[0] != target_version:
+                        return None
+                cursor.execute("""
+                    INSERT INTO lma_private.map_refresh_state
+                        (singleton, attempt_version, success_version, refreshed_at, error)
+                    VALUES (true, %s, %s, %s, %s)
+                    ON CONFLICT (singleton) DO UPDATE SET
+                        attempt_version = EXCLUDED.attempt_version,
+                        success_version = COALESCE(
+                            EXCLUDED.success_version,
+                            map_refresh_state.success_version
+                        ),
+                        refreshed_at = COALESCE(
+                            EXCLUDED.refreshed_at,
+                            map_refresh_state.refreshed_at
+                        ),
+                        error = EXCLUDED.error
+                    RETURNING attempt_version, success_version, refreshed_at, error
+                """, (
+                    target_version,
+                    target_version if error is None else None,
+                    refreshed_at,
+                    error,
+                ))
+                row = cursor.fetchone()
+            return dict(zip(
+                ("attempt_version", "success_version", "refreshed_at", "error"),
+                row,
+            ))
+
+        for _ in range(3):
+            target_version, payload = load_payload()
             error = refreshed_at = None
             try:
-                prepared_is_usable = (
-                    prepared is not None
-                    and getattr(prepared, "zip_revenue_rows", None) is not None
-                    and getattr(prepared, "zip_new_lead_rows", None) is not None
-                    and (
-                        getattr(prepared, "dataset_version", None) == version
-                        or allow_historical
-                    )
-                )
-                if prepared_is_usable:
-                    payload = prepared
-                    target_version = getattr(prepared, "dataset_version", None) or version
-                else:
-                    rows = read_canonical_csv_bytes(
-                        _uncompressed(compressed_master),
-                        self.settings,
-                        "Master",
-                    )
-                    lead_rows = read_canonical_csv_bytes(
-                        _uncompressed(compressed_leads),
-                        self.settings,
-                        "New Leads Master",
-                        allow_empty=True,
-                    )
-                    year, revenue, leads = zip_code_summaries(rows, lead_rows, self.settings)
-                    payload = SimpleNamespace(zip_year=year, zip_revenue_rows=revenue, zip_new_lead_rows=leads)
                 refreshed_at = publish(payload)
                 if not refreshed_at:
                     raise ValueError("Missing map configuration")
             except Exception as exception:
                 error = map_error_message(exception)
-                status_code = getattr(getattr(exception, "response", None), "status_code", None)
-                logging.getLogger(__name__).warning("Map refresh failed: %s (HTTP %s)", type(exception).__name__, status_code if isinstance(status_code, int) else "unavailable")
-            cursor.execute("""
-                INSERT INTO lma_private.map_refresh_state
-                    (singleton, attempt_version, success_version, refreshed_at, error)
-                VALUES (true, %s, %s, %s, %s)
-                ON CONFLICT (singleton) DO UPDATE SET
-                    attempt_version = EXCLUDED.attempt_version,
-                    success_version = COALESCE(EXCLUDED.success_version, map_refresh_state.success_version),
-                    refreshed_at = COALESCE(EXCLUDED.refreshed_at, map_refresh_state.refreshed_at),
-                    error = EXCLUDED.error
-                RETURNING attempt_version, success_version, refreshed_at, error
-            """, (target_version, target_version if error is None else None, refreshed_at, error))
-            return dict(zip(("attempt_version", "success_version", "refreshed_at", "error"), cursor.fetchone()))
+                status_code = getattr(
+                    getattr(exception, "response", None), "status_code", None
+                )
+                logging.getLogger(__name__).warning(
+                    "Map refresh failed: %s (HTTP %s)",
+                    type(exception).__name__,
+                    status_code if isinstance(status_code, int) else "unavailable",
+                )
+
+            status = save_status(
+                target_version,
+                refreshed_at,
+                error,
+                verify_current=error is None and not allow_historical,
+            )
+            if status is not None:
+                return status
+
+        return save_status(
+            target_version,
+            None,
+            "Map refresh was superseded by repeated dataset updates. Retry.",
+            verify_current=False,
+        )
 
     @staticmethod
     def _duplicate_history_entries(

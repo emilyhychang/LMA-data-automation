@@ -60,16 +60,25 @@ class ReportsAndMapsTest(unittest.TestCase):
     def test_refresh_uses_locked_current_version_and_saves_success(self):
         self.cursor.fetchone.side_effect = [
             (36, _compressed(self.master), _compressed(self.cleaned)),
+            (36,),
             (36, 36, 'timestamp', None),
         ]
-        publish = MagicMock(return_value='2026-10-29T12:00:00-07:00')
+        def publish_payload(_payload):
+            self.assertGreaterEqual(self.connection.__exit__.call_count, 1)
+            statements = [
+                call.args[0] for call in self.cursor.execute.call_args_list
+            ]
+            self.assertFalse(any('pg_advisory_xact_lock' in sql for sql in statements))
+            return '2026-10-29T12:00:00-07:00'
+
+        publish = MagicMock(side_effect=publish_payload)
         status = self.store.refresh_maps(publish)
         self.assertEqual(status['success_version'], 36)
         payload = publish.call_args.args[0]
         self.assertEqual(payload.zip_revenue_rows, [{'Zip': '92109', 'Revenue': 200.0}, {'Zip': '01234', 'Revenue': 100.0}])
         sql = [call.args[0] for call in self.cursor.execute.call_args_list]
-        self.assertIn('pg_advisory_xact_lock', sql[1])
-        self.assertIn('SELECT version, CASE WHEN version', sql[3])
+        self.assertIn('pg_advisory_xact_lock', sql[4])
+        self.assertIn('SELECT version', sql[2])
         self.assertFalse(any('UPDATE lma_private.dataset_state' in statement for statement in sql))
 
     def test_partial_or_failed_refresh_is_persisted_without_false_success(self):
@@ -150,7 +159,7 @@ class ReportsAndMapsTest(unittest.TestCase):
 
     def test_refresh_never_publishes_when_tracking_cannot_be_persisted(self):
         import psycopg
-        self.cursor.execute.side_effect = [None, None, psycopg.errors.UndefinedTable()]
+        self.cursor.execute.side_effect = [None, psycopg.errors.UndefinedTable()]
         publish = MagicMock()
         with self.assertRaises(psycopg.errors.UndefinedTable):
             self.store.refresh_maps(publish)
