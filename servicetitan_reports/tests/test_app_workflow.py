@@ -114,6 +114,37 @@ class AppWorkflowTest(unittest.TestCase):
         self.assertEqual(self.at.dataframe[0].value.iloc[0]['Revenue'], 50)
         self.assertTrue(any(e.label == 'Download original saved analysis' for e in self.at.get('download_button')))
 
+    def test_saved_report_reuses_precomputed_period_comparisons(self):
+        self.history.append(self.entry(1))
+        result = self.restored(35, 200)
+        comparison = {
+            "Period": "Current Period",
+            "Start": "2026-09-21",
+            "End": "2026-09-21",
+            "Records": 1,
+            "Unique Customers": 1,
+            "New Customers": 1,
+            "New Customer Gain/Loss": "—",
+            "Revenue": "999",
+        }
+        result.category_comparisons = {
+            "HVAC": [comparison],
+            "Plumbing": [comparison],
+        }
+        self.stack.enter_context(patch.object(
+            PersistentDatasetStore,
+            "load_saved_report",
+            return_value=result,
+        ))
+
+        self.at.run()
+
+        self.assertFalse(self.at.exception)
+        self.assertEqual(
+            self.at.dataframe[0].value.iloc[0]["Revenue"],
+            999,
+        )
+
     def test_current_upload_stays_selected_instead_of_loading_latest_saved_report(self):
         self.history.append(self.entry(1))
         uploaded = self.restored(35, 777)

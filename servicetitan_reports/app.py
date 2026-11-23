@@ -508,8 +508,10 @@ if current_status is not None:
 else:
     st.warning("The latest shared datasets are unavailable for download.")
 
-fresh_comparisons = None
-if (
+fresh_comparisons = (
+    getattr(result, "category_comparisons", None) if result else None
+)
+if fresh_comparisons is None and (
     result
     and result.period_start
     and result.master_csv is not None
@@ -521,8 +523,6 @@ if (
         result.period_start,
         result.period_end,
     )
-elif result:
-    fresh_comparisons = getattr(result, "category_comparisons", None)
 if fresh_comparisons:
     st.subheader("Period comparisons")
     st.caption(
