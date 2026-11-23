@@ -194,6 +194,48 @@ class AppWorkflowTest(unittest.TestCase):
             for message in self.at.success
         ))
 
+    def test_import_publishes_map_sources_once(self):
+        result = self.restored(36, 200)
+        result.zip_year = 2026
+        result.zip_revenue_rows = [{"Zip": "92109", "Revenue": 200.0}]
+        result.zip_new_lead_rows = [{"Zip": "92037", "New leads": 1}]
+        result.new_lead_rows = []
+        imported_status = DatasetStatus(36, self.now, "test@example.com")
+        self.stack.enter_context(patch.object(
+            PersistentDatasetStore, "status", return_value=imported_status
+        ))
+        save = self.stack.enter_context(patch.object(
+            PersistentDatasetStore, "import_report", return_value=result
+        ))
+        refresh = self.stack.enter_context(patch.object(
+            PersistentDatasetStore,
+            "refresh_maps",
+            return_value={
+                "attempt_version": 36,
+                "success_version": 36,
+                "refreshed_at": "2026-11-05T10:00:00-08:00",
+                "error": None,
+            },
+        ))
+
+        self.at.run()
+        self.at.file_uploader(key="raw_upload").set_value(
+            ("new.csv", self.master, "text/csv")
+        ).run()
+        next(
+            button
+            for button in self.at.button
+            if button.label == "Clean and save report"
+        ).click().run()
+
+        self.assertFalse(self.at.exception)
+        save.assert_called_once()
+        refresh.assert_called_once_with(
+            ANY,
+            prepared=result,
+            allow_historical=True,
+        )
+
     def test_master_downloads_exist_before_upload_and_charts_have_fixed_domain(self):
         self.at.run()
         self.assertFalse(self.at.exception)

@@ -320,13 +320,8 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
             dataset_status = store.status()
         except Exception:
             dataset_status = imported_status
-        try:
-            store.refresh_maps(
-                refresh_zip_map_sources,
-                prepared=result,
-            )
-        except Exception:
-            st.warning("The report was saved, but map refresh could not complete. Use Refresh map sources below.")
+        # The map section below performs the single automatic publication for
+        # this selected upload and records its session success key.
         if (
             result.appended_rows == 0
             and result.updated_rows == 0
