@@ -2,12 +2,13 @@ import sys
 import unittest
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "src"))
 from servicetitan_reports.pipeline import (
-    csv_bytes, load_settings, run_uploaded_import, validate_upload, weekly_opportunity_ytd,
+    csv_bytes, load_settings, read_and_clean_csv_bytes, run_uploaded_import,
+    validate_upload, weekly_opportunity_ytd,
 )
 from servicetitan_reports.storage import PersistentDatasetStore, _compressed
 
@@ -25,10 +26,18 @@ class ImportSafetyTest(unittest.TestCase):
     def store(self, master, *, repeat=False):
         connection = MagicMock()
         cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        master_csv = self.csv(master)
+        canonical_rows = read_and_clean_csv_bytes(
+            master_csv,
+            self.settings,
+            "Stored master",
+            allow_empty=True,
+        )
+        canonical_csv = csv_bytes(canonical_rows, self.settings["master_columns"])
         cursor.fetchone.return_value = (
             35,
-            _compressed(self.csv(master)),
-            _compressed(self.csv(master)),
+            _compressed(canonical_csv),
+            _compressed(canonical_csv),
         )
         store = PersistentDatasetStore("unused", self.settings, connect=lambda _: connection)
         return store, cursor
@@ -55,9 +64,14 @@ class ImportSafetyTest(unittest.TestCase):
 
     def test_exact_repeat_is_reprocessed_under_lock_without_duplicate_writes(self):
         store, cursor = self.store([self.row], repeat=True)
-        result = store.import_report(self.csv([self.row]), "renamed.csv", "test")
+        with patch(
+            "servicetitan_reports.storage.read_and_clean_csv_bytes",
+            wraps=read_and_clean_csv_bytes,
+        ) as parse_csv:
+            result = store.import_report(self.csv([self.row]), "renamed.csv", "test")
         self.assertEqual(result.dataset_version, 35)
         self.assertEqual(result.skipped_duplicate_rows, 1)
+        self.assertEqual(parse_csv.call_count, 1)
         statements = [call.args[0] for call in cursor.execute.call_args_list]
         self.assertIn("pg_advisory_xact_lock", statements[0])
         self.assertTrue(all(statement.lstrip().startswith("SELECT") for statement in statements))

@@ -655,47 +655,28 @@ class PersistentDatasetStore:
                 allow_group_replacement=allow_group_replacement,
                 cleaned_rows=cleaned_rows,
             )
-            final_master_rows = read_and_clean_csv_bytes(
-                result.master_csv,
-                self.settings,
-                "Updated master",
-                allow_empty=True,
-            )
-            authoritative_leads = first_seen_customer_rows(
-                final_master_rows, self.settings
-            )
-            authoritative_leads_csv = csv_bytes(
-                authoritative_leads, self.settings["master_columns"]
-            )
-            stored_lead_rows = read_and_clean_csv_bytes(
-                _uncompressed(stored_leads),
-                self.settings,
-                "New Leads Master",
-                allow_empty=True,
-            )
-            stored_leads_canonical_csv = csv_bytes(
-                first_seen_customer_rows(stored_lead_rows, self.settings),
-                self.settings["master_columns"],
-            )
-            lead_snapshot_changed = (
-                authoritative_leads_csv != stored_leads_canonical_csv
-            )
-            from .zip_maps import zip_code_summaries
-            zip_year, zip_revenue_rows, zip_new_lead_rows = zip_code_summaries(
-                final_master_rows,
-                authoritative_leads,
-                self.settings,
-                result.period_start,
-                result.period_end,
-            )
-            result = replace(
-                result,
-                new_leads_csv=authoritative_leads_csv,
-                new_lead_rows=authoritative_leads,
-                zip_year=zip_year,
-                zip_revenue_rows=zip_revenue_rows,
-                zip_new_lead_rows=zip_new_lead_rows,
-            )
+            # The pipeline already derived the authoritative lead snapshot and
+            # ZIP summaries from its final in-memory master. Compare the saved
+            # bytes directly instead of parsing and rebuilding both datasets.
+            stored_leads_csv = _uncompressed(stored_leads)
+            lead_snapshot_changed = result.new_leads_csv != stored_leads_csv
+            if lead_snapshot_changed:
+                # Older installations may contain semantically equivalent but
+                # noncanonical CSVs. Pay the normalization cost only for that
+                # legacy mismatch; current snapshots take the byte-fast path.
+                stored_lead_rows = read_and_clean_csv_bytes(
+                    stored_leads_csv,
+                    self.settings,
+                    "New Leads Master",
+                    allow_empty=True,
+                )
+                stored_leads_canonical_csv = csv_bytes(
+                    first_seen_customer_rows(stored_lead_rows, self.settings),
+                    self.settings["master_columns"],
+                )
+                lead_snapshot_changed = (
+                    result.new_leads_csv != stored_leads_canonical_csv
+                )
             if (
                 result.appended_rows == 0
                 and result.updated_rows == 0
