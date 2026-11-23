@@ -19,6 +19,8 @@ from servicetitan_reports.pipeline import (
     job_status_analysis,
     load_settings,
     period_new_leads_xlsx_bytes,
+    read_and_clean_csv_bytes,
+    read_canonical_csv_bytes,
     run_import,
     run_uploaded_import,
     weekly_opportunity_ytd,
@@ -26,6 +28,28 @@ from servicetitan_reports.pipeline import (
 
 
 class PipelineTest(unittest.TestCase):
+
+    def test_canonical_reader_matches_cleaner_and_falls_back_for_legacy_rows(self):
+        settings = load_settings(PROJECT / "config/settings.json")
+        legacy = csv_bytes([{
+            "Customer ID": " customer-1 ",
+            "Created Date": "09/21/2026",
+            "Invoice Business Unit": "HVAC  Service",
+            "Job Type": " Repair ",
+            "Total": "$1,000.00",
+            "Opportunity": "true",
+        }], settings["master_columns"])
+        cleaned_rows = read_and_clean_csv_bytes(legacy, settings, "Legacy master")
+        canonical = csv_bytes(cleaned_rows, settings["master_columns"])
+
+        self.assertEqual(
+            read_canonical_csv_bytes(legacy, settings, "Legacy master"),
+            cleaned_rows,
+        )
+        self.assertEqual(
+            read_canonical_csv_bytes(canonical, settings, "Canonical master"),
+            cleaned_rows,
+        )
 
     def test_local_and_uploaded_imports_share_the_same_results(self):
         settings = load_settings(PROJECT / "config/settings.json")

@@ -296,6 +296,107 @@ def read_and_clean_csv_bytes(
     )
 
 
+def read_canonical_csv_bytes(
+    contents: bytes,
+    settings: dict[str, Any],
+    dataset_name: str,
+    allow_empty: bool = False,
+) -> list[dict[str, str]]:
+    """Read an app-generated master CSV without renormalizing every field.
+
+    Saved masters and lead snapshots are already emitted in the canonical
+    column order by ``csv_bytes``. Legacy or structurally different files fall
+    back to the full cleaner so compatibility is preserved.
+    """
+
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{dataset_name} must be saved as a UTF-8 CSV.") from error
+
+    reader = csv.reader(io.StringIO(text))
+    header = next(reader, None)
+    columns = settings["master_columns"]
+    if header != columns:
+        return read_and_clean_csv_bytes(
+            contents,
+            settings,
+            dataset_name,
+            allow_empty=allow_empty,
+        )
+
+    required_indexes = [
+        columns.index(column) for column in settings["required_columns"]
+    ]
+    customer_index = columns.index("Customer ID")
+    created_index = columns.index("Created Date")
+    completion_index = columns.index("Completion Date")
+    total_index = columns.index("Total")
+    opportunity_index = columns.index("Opportunity")
+    calendar_indexes = [
+        columns.index(column)
+        for column in (
+            "C Year",
+            "C Qtr",
+            "C Mo",
+            "B Year",
+            "B Qtr",
+            "B Mo",
+            "B Wk",
+        )
+    ]
+
+    def is_canonical(values: list[str]) -> bool:
+        created = values[created_index]
+        try:
+            created_day = date.fromisoformat(created)
+        except ValueError:
+            return False
+        if created_day.isoformat() != created:
+            return False
+        completion = values[completion_index]
+        if completion:
+            try:
+                if date.fromisoformat(completion).isoformat() != completion:
+                    return False
+            except ValueError:
+                return False
+        if parse_amount(values[total_index]) != values[total_index]:
+            return False
+        opportunity = values[opportunity_index]
+        if opportunity.casefold() in {"true", "false"} and opportunity not in {
+            "True",
+            "False",
+        }:
+            return False
+        return all(values[index] for index in calendar_indexes)
+
+    rows = []
+    for values in reader:
+        if len(values) != len(columns) or not is_canonical(values):
+            return read_and_clean_csv_bytes(
+                contents,
+                settings,
+                dataset_name,
+                allow_empty=allow_empty,
+            )
+        if values[customer_index] and all(values[index] for index in required_indexes):
+            row = dict(zip(columns, values))
+            # standardise_row derives this transient field even though the
+            # configured master export does not persist it.
+            if "C Wk" not in row:
+                row["C Wk"] = str(
+                    date.fromisoformat(values[created_index]).isocalendar().week
+                )
+            rows.append(row)
+
+    if not rows and not allow_empty:
+        raise ValueError(
+            f"{dataset_name} has no valid job rows with all required values."
+        )
+    return rows
+
+
 def write_csv_rows(
     handle: Any,
     rows: list[dict[str, str]],
@@ -1080,7 +1181,7 @@ def run_uploaded_import(
     if cleaned_rows is None:
         cleaned_rows = read_and_clean_csv_bytes(source_contents, settings, "New ServiceTitan export")
     cleaned_rows = deduplicate_exact_rows(cleaned_rows, settings)
-    master_rows = read_and_clean_csv_bytes(
+    master_rows = read_canonical_csv_bytes(
         master_contents, settings, "Master dataset", allow_empty=True
     )
     if not allow_group_replacement:

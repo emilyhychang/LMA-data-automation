@@ -15,6 +15,7 @@ from .pipeline import (
     csv_bytes,
     first_seen_customer_rows,
     read_and_clean_csv_bytes,
+    read_canonical_csv_bytes,
     row_snapshot,
     run_uploaded_import,
     validate_upload,
@@ -415,7 +416,13 @@ class PersistentDatasetStore:
             incoming = read_and_clean_csv_bytes(cleaned, self.settings, "Saved report")
             start, end = infer_period(incoming, self.settings)
             if master is not None:
-                master_rows = cached_rows if cached_rows is not None else read_and_clean_csv_bytes(master, self.settings, "Saved master")
+                master_rows = (
+                    cached_rows
+                    if cached_rows is not None
+                    else read_canonical_csv_bytes(
+                        master, self.settings, "Saved master"
+                    )
+                )
                 lead_rows = first_seen_customer_rows(master_rows, self.settings)
                 comparisons = category_period_comparisons(
                     master_rows, start, end, self.settings, lead_rows
@@ -494,8 +501,12 @@ class PersistentDatasetStore:
                     payload = prepared
                     target_version = getattr(prepared, "dataset_version", None) or version
                 else:
-                    rows = read_and_clean_csv_bytes(_uncompressed(compressed_master), self.settings, "Master")
-                    lead_rows = read_and_clean_csv_bytes(
+                    rows = read_canonical_csv_bytes(
+                        _uncompressed(compressed_master),
+                        self.settings,
+                        "Master",
+                    )
+                    lead_rows = read_canonical_csv_bytes(
                         _uncompressed(compressed_leads),
                         self.settings,
                         "New Leads Master",

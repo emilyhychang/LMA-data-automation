@@ -21,7 +21,7 @@ from servicetitan_reports.pipeline import (  # noqa: E402
     ensure_categorized_csv_bytes,
     load_settings,
     period_new_leads_xlsx_bytes,
-    read_and_clean_csv_bytes,
+    read_canonical_csv_bytes,
 )
 from servicetitan_reports.storage import (  # noqa: E402
     DatasetStatus,
@@ -55,7 +55,7 @@ def period_new_leads_download_bytes(
 ) -> bytes:
     """Build one report-period workbook from its saved new-leads snapshot."""
 
-    new_lead_rows = read_and_clean_csv_bytes(
+    new_lead_rows = read_canonical_csv_bytes(
         new_leads_csv,
         SETTINGS,
         "Saved New Leads Master",
@@ -78,13 +78,13 @@ def report_category_comparisons(
 ):
     """Recalculate comparisons from the report currently shown on screen."""
 
-    report_rows = read_and_clean_csv_bytes(
+    report_rows = read_canonical_csv_bytes(
         master_csv,
         SETTINGS,
         "Report master",
         allow_empty=True,
     )
-    new_lead_rows = read_and_clean_csv_bytes(
+    new_lead_rows = read_canonical_csv_bytes(
         new_leads_csv,
         SETTINGS,
         "Saved New Leads Master",
