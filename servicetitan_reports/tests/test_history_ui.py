@@ -7,7 +7,9 @@ from unittest.mock import MagicMock
 
 class HistoryUITest(unittest.TestCase):
     def test_delete_callback_only_updates_history_and_preserves_import_result(self):
-        source = (Path(__file__).resolve().parents[1] / 'app.py').read_text()
+        source = (
+            Path(__file__).resolve().parents[1] / 'servicetitan_page.py'
+        ).read_text()
         function = next(node for node in ast.parse(source).body
                         if isinstance(node, ast.FunctionDef) and node.name == 'render_file_history')
         self.assertEqual(ast.unparse(function.decorator_list[0]), 'st.fragment')
@@ -40,7 +42,9 @@ class HistoryUITest(unittest.TestCase):
         st.rerun.assert_not_called()
 
     def test_failed_delete_keeps_history_visible(self):
-        source = (Path(__file__).resolve().parents[1] / 'app.py').read_text()
+        source = (
+            Path(__file__).resolve().parents[1] / 'servicetitan_page.py'
+        ).read_text()
         function = next(node for node in ast.parse(source).body
                         if isinstance(node, ast.FunctionDef) and node.name == 'render_file_history')
         function.decorator_list = []
