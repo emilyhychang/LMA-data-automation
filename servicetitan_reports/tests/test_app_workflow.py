@@ -286,6 +286,36 @@ class AppWorkflowTest(unittest.TestCase):
         for chart in charts:
             spec = json.loads(chart.proto.spec)
             self.assertEqual(spec["encoding"]["x"]["scale"]["domain"], [0.5, 52.5])
+
+    def test_weekly_charts_add_a_line_and_legend_item_for_every_year(self):
+        rows = [
+            {
+                "Customer ID": str(year),
+                "Created Date": f"{year}-01-08",
+                "Invoice Business Unit": "HVAC Service",
+                "Job Type": "Repair",
+                "Job Status": "Completed",
+                "Opportunity": "True",
+            }
+            for year in (2024, 2025, 2026)
+        ]
+        master = csv_bytes(rows, self.settings["master_columns"])
+        status = DatasetStatus(35, self.now, "test")
+        self.stack.enter_context(patch.object(
+            PersistentDatasetStore,
+            "downloads",
+            return_value=(master, master, status),
+        ))
+
+        self.at.run()
+
+        self.assertFalse(self.at.exception)
+        for chart in self.at.get("vega_lite_chart"):
+            spec = json.loads(chart.proto.spec)
+            self.assertEqual(
+                spec["transform"][0]["fold"],
+                ["2024", "2025", "2026"],
+            )
             self.assertEqual(spec["encoding"]["x"]["axis"]["values"], list(range(1, 53)))
             self.assertNotIn("params", spec)
             self.assertNotIn("selection", spec)

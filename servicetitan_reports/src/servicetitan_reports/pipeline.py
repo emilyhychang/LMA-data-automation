@@ -1001,8 +1001,8 @@ def weekly_opportunity_ytd(
     category: str,
     settings: dict[str, Any],
     job_statuses: set[str] | None = None,
-) -> tuple[list[dict[str, int | None]], tuple[int, int] | None]:
-    """Return weeks 1–52 of opportunity counts for the latest and prior year."""
+) -> tuple[list[dict[str, int | None]], tuple[int, ...] | None]:
+    """Return weeks 1–52 of opportunity counts for every available ISO year."""
 
     dated_rows = [
         (row, day)
@@ -1012,15 +1012,15 @@ def weekly_opportunity_ytd(
     if not dated_rows:
         return [], None
 
-    current_year = max(day.isocalendar().year for _, day in dated_rows)
-    previous_year = current_year - 1
+    years = tuple(sorted({day.isocalendar().year for _, day in dated_rows}))
+    current_year = years[-1]
     latest_current_day = max(
         day for _, day in dated_rows if day.isocalendar().year == current_year
     )
     last_week = min(latest_current_day.isocalendar().week, 52)
     counts = {
-        current_year: {week: 0 for week in range(1, last_week + 1)},
-        previous_year: {week: 0 for week in range(1, 53)},
+        year: {week: 0 for week in range(1, 53)}
+        for year in years
     }
     category_map = invoice_category_mapping(settings)
 
@@ -1042,17 +1042,17 @@ def weekly_opportunity_ytd(
             continue
         counts[week_year][week] += 1
 
-    chart_rows = [
-        {
-            "Week": week,
-            str(previous_year): counts[previous_year][week],
-            str(current_year): (
-                counts[current_year][week] if week <= last_week else None
-            ),
-        }
-        for week in range(1, 53)
-    ]
-    return chart_rows, (previous_year, current_year)
+    chart_rows = []
+    for week in range(1, 53):
+        chart_row: dict[str, int | None] = {"Week": week}
+        for year in years:
+            chart_row[str(year)] = (
+                counts[year][week]
+                if year != current_year or week <= last_week
+                else None
+            )
+        chart_rows.append(chart_row)
+    return chart_rows, years
 
 
 def process_import_rows(

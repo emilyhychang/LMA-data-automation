@@ -1,0 +1,9 @@
+Customer ID,Created Date,Completion Date,Invoice Business Unit,Job Type,Job Status,Campaign Category,Campaign,Location Zip,Total,Opportunity
+TEST-2027-PLUMBING-W01,2027-01-04,2027-01-05,Plumbing Service,Repair,Completed,Test,Year rollover test,92101,125.00,True
+TEST-2027-HVAC-W01,2027-01-04,2027-01-05,HVAC Service,Repair,Completed,Test,Year rollover test,92102,225.00,True
+TEST-2027-PLUMBING-W02,2027-01-11,2027-01-12,Plumbing Service,Repair,Completed,Test,Year rollover test,92103,150.00,True
+TEST-2027-HVAC-W02,2027-01-11,2027-01-12,HVAC Service,Repair,Completed,Test,Year rollover test,92104,250.00,True
+TEST-2028-PLUMBING-W01,2028-01-03,2028-01-04,Plumbing Service,Repair,Completed,Test,Year rollover test,92105,175.00,True
+TEST-2028-HVAC-W01,2028-01-03,2028-01-04,HVAC Service,Repair,Completed,Test,Year rollover test,92106,275.00,True
+TEST-2028-PLUMBING-W02,2028-01-10,2028-01-11,Plumbing Service,Repair,Completed,Test,Year rollover test,92107,200.00,True
+TEST-2028-HVAC-W02,2028-01-10,2028-01-11,HVAC Service,Repair,Completed,Test,Year rollover test,92108,300.00,True

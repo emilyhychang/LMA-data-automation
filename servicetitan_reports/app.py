@@ -691,7 +691,8 @@ if dashboard and dashboard['has_rows']:
     st.subheader("Weekly opportunities — YTD")
     st.caption(
         "Count of nonblank Opportunity values for each customer's first master "
-        "record. Weeks and year labels use the ISO week calendar; charts end at week 52."
+        "record. Every available ISO year remains as its own line and legend item; "
+        "charts end at week 52."
     )
     available_statuses = sorted({
         row["Job Status"] for row in derived_lead_rows if row.get("Job Status")
@@ -710,7 +711,10 @@ if dashboard and dashboard['has_rows']:
             st.vega_lite_chart(
                 chart_rows,
                 {
-                    "transform": [{"fold": [str(years[0]), str(years[1])], "as": ["Year", "Opportunities"]}],
+                    "transform": [{
+                        "fold": [str(year) for year in years],
+                        "as": ["Year", "Opportunities"],
+                    }],
                     "mark": "line",
                     "encoding": {
                         "x": {
@@ -725,7 +729,10 @@ if dashboard and dashboard['has_rows']:
                     },
                 },
                 width="stretch",
-                alt=f"Weekly {category} opportunities for {years[0]} and {years[1]}",
+                alt=(
+                    f"Weekly {category} opportunities for "
+                    f"{', '.join(str(year) for year in years)}"
+                ),
             )
         else:
             st.info(f"No {category} opportunity history is available yet.")
