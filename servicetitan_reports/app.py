@@ -302,7 +302,6 @@ if st.button("Clean and save report", type="primary", disabled=raw_upload is Non
                 raw_upload.name,
                 email,
                 allow_historical=True,
-                allow_correction=False,
             )
         st.session_state["import_result"] = result
         st.session_state["raw_stem"] = Path(raw_upload.name).stem

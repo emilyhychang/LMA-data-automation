@@ -97,9 +97,14 @@ class ImportSafetyTest(unittest.TestCase):
         statements = [call.args[0] for call in cursor.execute.call_args_list]
         self.assertTrue(any("UPDATE lma_private.dataset_state" in sql for sql in statements))
 
-    def test_explicit_correction_can_reapply_old_file_and_retains_all_history(self):
+    def test_explicit_group_replacement_can_reapply_old_file_and_retains_all_history(self):
         store, cursor = self.store([{**self.row, "Total": "200"}], repeat=True)
-        result = store.import_report(self.csv([self.row]), "old.csv", "test", allow_correction=True)
+        result = store.import_report(
+            self.csv([self.row]),
+            "old.csv",
+            "test",
+            allow_group_replacement=True,
+        )
         self.assertEqual(result.updated_rows, 1)
         statements = [call.args[0] for call in cursor.execute.call_args_list]
         self.assertTrue(any("INSERT INTO lma_private.dataset_backups" in sql for sql in statements))
@@ -122,12 +127,11 @@ class ImportSafetyTest(unittest.TestCase):
         result = run_uploaded_import(self.csv([self.row]), self.csv(before), self.settings, allow_group_replacement=True)
         self.assertEqual((result.appended_rows, result.updated_rows, result.skipped_duplicate_rows, result.removed_rows), (0, 0, 1, 1))
 
-    def test_identical_new_rows_are_not_silently_deleted_or_added(self):
+    def test_identical_new_rows_are_silently_deduplicated(self):
         incoming = self.csv([self.row, self.row])
-        with self.assertRaisesRegex(ValueError, "identical job rows"):
-            run_uploaded_import(incoming, self.csv([]), self.settings)
-        result = run_uploaded_import(incoming, self.csv([]), self.settings, allow_group_replacement=True)
-        self.assertEqual(result.appended_rows, 2)
+        result = run_uploaded_import(incoming, self.csv([]), self.settings)
+        self.assertEqual(result.cleaned_rows, 1)
+        self.assertEqual(result.appended_rows, 1)
 
     def test_iso_week_53_is_excluded_and_new_year_is_not_misassigned(self):
         rows = [{**self.row, "Created Date": day} for day in ("2020-12-31", "2021-01-01", "2021-01-04")]

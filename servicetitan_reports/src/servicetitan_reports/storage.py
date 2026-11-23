@@ -627,7 +627,7 @@ class PersistentDatasetStore:
         actor: str,
         *,
         allow_historical: bool = False,
-        allow_correction: bool = False,
+        allow_group_replacement: bool = False,
     ) -> UploadedImportResult:
         """Serialize imports, back up both datasets, and commit them together."""
 
@@ -652,7 +652,7 @@ class PersistentDatasetStore:
                 source_contents=source_contents,
                 master_contents=master,
                 settings=self.settings,
-                allow_group_replacement=allow_correction,
+                allow_group_replacement=allow_group_replacement,
                 cleaned_rows=cleaned_rows,
             )
             final_master_rows = read_and_clean_csv_bytes(

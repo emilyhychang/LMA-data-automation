@@ -560,16 +560,13 @@ def validate_group_replacements(master_rows, incoming_rows, settings):
             existing[key].append(row)
     for key, replacement in incoming.items():
         previous = existing[key]
-        if not previous and len({row_snapshot(row, settings) for row in replacement}) < len(replacement):
-            raise ValueError("The upload contains identical job rows. Verify these are separate jobs, then enable the correction option to preserve them intentionally.")
         if len(previous) > 1 or len(replacement) > 1:
             before = Counter(row_snapshot(row, settings) for row in previous)
             after = Counter(row_snapshot(row, settings) for row in replacement)
             if previous and before != after:
                 raise ValueError(
                     "Multiple jobs share the same customer, date, business unit and job type. "
-                    "Verify the export contains every job for those groups, then enable "
-                    "the correction option to replace those groups."
+                    "Verify the export contains every job for those groups."
                 )
 
 
@@ -664,6 +661,23 @@ def row_snapshot(
         clean_text(row.get(column, ""))
         for column in settings["master_columns"]
     )
+
+
+def deduplicate_exact_rows(
+    rows: list[dict[str, str]],
+    settings: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Keep the first copy of each fully identical job row."""
+
+    seen = set()
+    unique_rows = []
+    for row in rows:
+        snapshot = row_snapshot(row, settings)
+        if snapshot in seen:
+            continue
+        seen.add(snapshot)
+        unique_rows.append(row)
+    return unique_rows
 
 
 def merge_master_rows(
@@ -1065,6 +1079,7 @@ def run_uploaded_import(
     columns = settings["master_columns"]
     if cleaned_rows is None:
         cleaned_rows = read_and_clean_csv_bytes(source_contents, settings, "New ServiceTitan export")
+    cleaned_rows = deduplicate_exact_rows(cleaned_rows, settings)
     master_rows = read_and_clean_csv_bytes(
         master_contents, settings, "Master dataset", allow_empty=True
     )
