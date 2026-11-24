@@ -33,7 +33,11 @@ def imported_dashboard(cache, result, status):
 
 
 def weekly_charts(cache, dashboard, settings, statuses):
-    key = ('all-years-v1', dashboard['status'].version, tuple(sorted(statuses)))
+    key = (
+        'weekly-years-2025-2026-v1',
+        dashboard['status'].version,
+        tuple(sorted(statuses)),
+    )
     if cache.get('chart_key') != key:
         cache['charts'] = {category: weekly_opportunity_ytd(
             dashboard['lead_rows'], category, settings, set(statuses))

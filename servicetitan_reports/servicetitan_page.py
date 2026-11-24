@@ -690,8 +690,7 @@ if dashboard and dashboard['has_rows']:
     st.subheader("Weekly opportunities — YTD")
     st.caption(
         "Count of nonblank Opportunity values for each customer's first master "
-        "record. Every available ISO year remains as its own line and legend item; "
-        "charts end at week 52."
+        "record. The comparison is fixed to 2025 and 2026; charts end at ISO week 52."
     )
     available_statuses = sorted({
         row["Job Status"] for row in derived_lead_rows if row.get("Job Status")
@@ -711,7 +710,7 @@ if dashboard and dashboard['has_rows']:
                 chart_rows,
                 {
                     "transform": [{
-                        "fold": [str(year) for year in years],
+                        "fold": [str(years[0]), str(years[1])],
                         "as": ["Year", "Opportunities"],
                     }],
                     "mark": "line",
@@ -728,10 +727,7 @@ if dashboard and dashboard['has_rows']:
                     },
                 },
                 width="stretch",
-                alt=(
-                    f"Weekly {category} opportunities for "
-                    f"{', '.join(str(year) for year in years)}"
-                ),
+                alt=f"Weekly {category} opportunities for {years[0]} and {years[1]}",
             )
         else:
             st.info(f"No {category} opportunity history is available yet.")

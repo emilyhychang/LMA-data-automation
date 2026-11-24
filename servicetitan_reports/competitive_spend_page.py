@@ -187,7 +187,7 @@ except ValueError as error:
 
 years = available_years(dataset.records)
 if not years:
-    st.error("No TV, Cable, or Radio records were found.")
+    st.error("No TV, Cable, Radio, or OOH records were found.")
     st.stop()
 
 controls = st.container(horizontal=True, vertical_alignment="bottom")
@@ -229,7 +229,7 @@ if dataset.invalid_spend_rows or dataset.invalid_period_rows:
         "with invalid spend or period values were excluded."
     )
 
-metric_columns = st.columns(3)
+metric_columns = st.columns(len(TARGET_MEDIA_TYPES))
 for column, media_type in zip(metric_columns, TARGET_MEDIA_TYPES):
     rows = spend_share_rows(
         dataset.records,

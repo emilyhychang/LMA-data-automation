@@ -13,7 +13,7 @@ from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
 
 
-TARGET_MEDIA_TYPES = ("TV", "Cable", "Radio")
+TARGET_MEDIA_TYPES = ("TV", "Cable", "Radio", "OOH")
 MONTH_NAMES = (
     "January",
     "February",
@@ -62,6 +62,13 @@ def _clean_text(value: object) -> str:
 
 def _header_key(value: object) -> str:
     return re.sub(r"[^a-z0-9]", "", _clean_text(value).casefold())
+
+
+def _canonical_media_type(value: object) -> str:
+    media_type = _clean_text(value)
+    if _header_key(media_type) in {"ooh", "outofhome"}:
+        return "OOH"
+    return media_type
 
 
 def _parse_spend(value: object) -> float | None:
@@ -201,9 +208,11 @@ def read_competitive_spend_workbook(contents: bytes) -> CompetitiveSpendDataset:
             invalid_period_rows += 1
             continue
 
-        media_type = _clean_text(value("media_type"))
+        media_type = _canonical_media_type(value("media_type"))
         if not media_type:
-            media_type = media_lookup.get(media_outlet.casefold(), "")
+            media_type = _canonical_media_type(
+                media_lookup.get(media_outlet.casefold(), "")
+            )
         if not media_type:
             continue
 

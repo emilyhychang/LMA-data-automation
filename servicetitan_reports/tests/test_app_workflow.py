@@ -287,7 +287,7 @@ class AppWorkflowTest(unittest.TestCase):
             spec = json.loads(chart.proto.spec)
             self.assertEqual(spec["encoding"]["x"]["scale"]["domain"], [0.5, 52.5])
 
-    def test_weekly_charts_add_a_line_and_legend_item_for_every_year(self):
+    def test_weekly_charts_show_latest_and_prior_year_only(self):
         rows = [
             {
                 "Customer ID": str(year),
@@ -297,7 +297,7 @@ class AppWorkflowTest(unittest.TestCase):
                 "Job Status": "Completed",
                 "Opportunity": "True",
             }
-            for year in (2024, 2025, 2026)
+            for year in (2022, 2023, 2024, 2025, 2026)
         ]
         master = csv_bytes(rows, self.settings["master_columns"])
         status = DatasetStatus(35, self.now, "test")
@@ -314,7 +314,7 @@ class AppWorkflowTest(unittest.TestCase):
             spec = json.loads(chart.proto.spec)
             self.assertEqual(
                 spec["transform"][0]["fold"],
-                ["2024", "2025", "2026"],
+                ["2025", "2026"],
             )
             self.assertEqual(spec["encoding"]["x"]["axis"]["values"], list(range(1, 53)))
             self.assertNotIn("params", spec)

@@ -57,6 +57,7 @@ class CompetitiveSpendTest(unittest.TestCase):
             ["TV-1", "San Diego", "A", "Parent A", "Home", 1, 50, 1, "Feb", 2026, "TV"],
             ["Cable-1", "San Diego", "C", "Parent C", "Home", 1, 25, 1, "Jan", 2026, "Cable"],
             ["Radio-1", "San Diego", "D", "Parent D", "Home", 1, 15, 1, "Jan", 2026, "Radio"],
+            ["Billboard-1", "San Diego", "F", "Parent F", "Home", 1, 30, 1, "Jan", 2026, "Out of Home"],
             ["Radio-1", "San Diego", "D", "Parent D", "Home", 1, 10, 1, "Jan", 2025, "Radio"],
             ["Radio-2", "San Diego", "E", "Parent E", "Home", 1, None, 1, "Jan", 2025, "Radio"],
         ])
@@ -64,8 +65,8 @@ class CompetitiveSpendTest(unittest.TestCase):
     def test_reads_detail_view_and_tracks_blank_spend(self):
         dataset = read_competitive_spend_workbook(self.contents)
 
-        self.assertEqual(len(dataset.records), 6)
-        self.assertEqual(dataset.source_rows, 7)
+        self.assertEqual(len(dataset.records), 7)
+        self.assertEqual(dataset.source_rows, 8)
         self.assertEqual(dataset.blank_spend_rows, 1)
         self.assertEqual(available_years(dataset.records), (2026, 2025))
         self.assertEqual(available_months(dataset.records, 2026), (1, 2))
@@ -140,10 +141,10 @@ class CompetitiveSpendTest(unittest.TestCase):
             )).run()
 
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.get("echarts_chart")), 6)
+        self.assertEqual(len(app.get("echarts_chart")), 8)
         self.assertEqual(
             [metric.label for metric in app.metric],
-            ["TV spend", "Cable spend", "Radio spend"],
+            ["TV spend", "Cable spend", "Radio spend", "OOH spend"],
         )
         self.assertTrue(any(
             button.label == "Download spend-share analysis"

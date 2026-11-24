@@ -586,17 +586,18 @@ class PipelineTest(unittest.TestCase):
                 "Invoice Business Unit": "HVAC Service",
                 "Opportunity": "True",
             },
+            {
+                "Created Date": "01/08/2028",
+                "Invoice Business Unit": "Plumbing Service",
+                "Opportunity": "True",
+            },
         ]
 
         chart, years = weekly_opportunity_ytd(rows, "Plumbing", settings)
 
-        self.assertEqual(years, (2024, 2025, 2026))
+        self.assertEqual(years, (2025, 2026))
         self.assertEqual(len(chart), 52)
-        self.assertEqual(
-            chart[1],
-            {"Week": 2, "2024": 1, "2025": 1, "2026": 2},
-        )
-        self.assertEqual(sum(row["2024"] for row in chart), 1)
+        self.assertEqual(chart[1], {"Week": 2, "2025": 1, "2026": 2})
         self.assertEqual(sum(row["2025"] for row in chart), 2)
         self.assertEqual(chart[-1]["Week"], 52)
         self.assertIsNone(chart[-1]["2026"])
